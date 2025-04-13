@@ -1,0 +1,57 @@
+.pio_version 0
+
+.program tlc59283_tx
+.side_set 1
+; Side 0 is CLK
+
+.define public T_SETUP 4
+.define public T_CLK_RISE_DELAY 4
+.define public T_CLK_HIGH 4
+
+; Assert clock low and wait a little
+    nop             side 0 [T_SETUP - 1] ; 
+.wrap_target
+    ; This is a serial protocol, so shift one bit from output FIFO to DATA pin
+    out pins, 1     side 0 [T_CLK_RISE_DELAY - 1] ; Shift one bit while keeping clock low
+    nop             side 1 [T_CLK_HIGH - 1] ; Pulse clock high
+.wrap
+
+% c-sdk {
+#include "hardware/gpio.h"
+#include "hardware/clocks.h"
+
+static inline void tlc59283_tx_program_init(PIO pio, uint sm, uint offset, uint pin_clk, uint pin_data, float freq) {
+    // Configure GPIO for use by PIO (Set GPIO function select)
+    pio_gpio_init(pio, pin_clk);
+    pio_gpio_init(pio, pin_data);
+    // Set PIO pin directions to out (isout=true) for clock and data pins.
+    // Clock and data pins may not be consecutive, but there is no
+    // non-consecutive function so I assume we just use consecutive with a
+    // length of only 1.
+    pio_sm_set_consecutive_pindirs(pio, sm, pin_clk, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, pin_data, 1, true);
+
+    // Get default config using the generated function for this program and modify it
+    pio_sm_config c = tlc59283_tx_program_get_default_config(offset);
+    // Set the clock pin as a sideset pin
+    sm_config_set_sideset_pins(&c, pin_clk);
+    // Set false for shift to right, true for autopull enable, 16 for autopull
+    // threshold (16 bits per tile and row)
+    sm_config_set_out_shift(&c, false, true, 16);
+
+    // Join FIFOs to get larger length as we won't need the RX FIFO.
+    // TX FIFO length=8 is used for transmit, RX FIFO is disabled.
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+    // Set divider applied to system clock to get desired bitrate
+    int cycles_per_bit = tlc59283_tx_T_CLK_RISE_DELAY + tlc59283_tx_T_CLK_HIGH;
+    float div = clock_get_hz(clk_sys) / (freq * cycles_per_bit);
+    sm_config_set_clkdiv(&c, div);
+
+    // Load configuration into state machine and set program counter the start
+    // address (offset)
+    pio_sm_init(pio, sm, offset, &c);
+    // Start the state machine
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}

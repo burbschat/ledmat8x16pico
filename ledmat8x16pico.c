@@ -9,7 +9,7 @@
 // the rp2350.
 #define PIN_CLK 2
 #define PIN_DATA 3
-#define TLC59283_TX_FREQ 800000
+#define TLC59283_TX_FREQ 800
 
 const uint LED_PIN = 25;
 const uint MOSFET_TEST = 15;
@@ -29,6 +29,8 @@ int main() {
     uint sm;
     uint offset;
 
+    uint32_t test_pattern = 0b10101010101010101010101010101010;
+
     // This will find a free pio and state machine for our program and load it for us
     // We use pio_claim_free_sm_and_add_program_for_gpio_range (for_gpio_range variant)
     // so we will get a PIO instance suitable for addressing gpios >= 32 if needed and supported by the hardware
@@ -40,10 +42,16 @@ int main() {
     while(1) {
         gpio_put(LED_PIN, 0);
         gpio_put(MOSFET_TEST, 0);
-        sleep_ms(1);
+        sleep_ms(1000);
         gpio_put(LED_PIN, 1);
         gpio_put(MOSFET_TEST, 1);
         // puts("Hello World\n");
-        sleep_ms(1);
+        pio_sm_put_blocking(pio, sm, test_pattern);
+        sleep_ms(1000);
     }
+
+    // This will free resources and unload our program.
+    // Technically the program never reaches this point but keep the line here
+    // so I don't forget about this function.
+    pio_remove_program_and_unclaim_sm(&tlc59283_tx_program, pio, sm, offset);
 }

@@ -9,7 +9,9 @@
 // the rp2350.
 #define PIN_CLK 2
 #define PIN_DATA 3
-#define TLC59283_TX_FREQ 800
+// Seems like 10MHz is around the limit for decently shaped pulses with my
+// hardware. Have to do a proper rate test once everything is implemented.
+#define TLC59283_TX_FREQ 5000000
 
 const uint LED_PIN = 25;
 const uint MOSFET_TEST = 15;

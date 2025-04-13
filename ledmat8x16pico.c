@@ -13,14 +13,14 @@
 // hardware. Have to do a proper rate test once everything is implemented.
 #define TLC59283_TX_FREQ 5000000
 
-const uint LED_PIN = 25;
+#define PIN_LED 25
 const uint MOSFET_TEST = 15;
 
 int main() {
     stdio_init_all();
 
-    gpio_init(LED_PIN);
-    gpio_set_dir(LED_PIN, GPIO_OUT);
+    gpio_init(PIN_LED);
+    gpio_set_dir(PIN_LED, GPIO_OUT);
 
     gpio_init(MOSFET_TEST);
     gpio_set_dir(MOSFET_TEST, GPIO_OUT);
@@ -42,10 +42,10 @@ int main() {
     tlc59283_tx_program_init(pio, sm, offset, PIN_CLK, PIN_DATA, TLC59283_TX_FREQ);
 
     while(1) {
-        gpio_put(LED_PIN, 0);
+        gpio_put(PIN_LED, 0);
         gpio_put(MOSFET_TEST, 0);
         sleep_ms(1000);
-        gpio_put(LED_PIN, 1);
+        gpio_put(PIN_LED, 1);
         gpio_put(MOSFET_TEST, 1);
         // puts("Hello World\n");
         pio_sm_put_blocking(pio, sm, test_pattern);

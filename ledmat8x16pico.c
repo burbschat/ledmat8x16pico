@@ -16,7 +16,7 @@
 #define PIN_ROWS_BASE 6
 #define N_ROWS 8
 
-#define N_DISPLAY_MODULES 3
+#define N_DISPLAY_MODULES 7
 // Seems like 10MHz is around the limit for decently shaped pulses with my
 // hardware.
 // Delay after TX FIFO empty must be sufficiently long for the higher frequencies
@@ -42,10 +42,16 @@ uint sm_tx = 0;
 
 int dma_chan;
 
-void frame_buffer_insert_hex(uint64_t hex, int n_module) {
+void frame_buffer_insert_hex(uint64_t hex, int n_module, bool r, bool g) {
     for (int row = 0; row < N_ROWS; row++) {
         uint8_t x = 0;
-        uint8_t y = *((uint8_t *)&hex + row);
+        uint8_t y = 0;
+        if (g) {
+            x = *((uint8_t *)&hex + row);
+        }
+        if (r) {
+            y = *((uint8_t *)&hex + row);
+        }
         uint16_t z;
         // Interleave bits
         // Shamelessly stolen from http://graphics.stanford.edu/~seander/bithacks.html#Interleave64bitOps
@@ -63,7 +69,13 @@ void init_frame_buffer() {
         /*for (int row = 0; row < N_ROWS; row++) {*/
         /*    frame_buffer[row][module] = test_pattern[module % 2];*/
         /*}*/
-        frame_buffer_insert_hex(0xff7f3f1f0f070301, 0);
+        frame_buffer_insert_hex(0xc6c6e6f6decec600, 0, 1, 0);
+        frame_buffer_insert_hex(0x6666667e66663c00, 1, 1, 1);
+        frame_buffer_insert_hex(0x3c66760606663c00, 2, 0, 1);
+        frame_buffer_insert_hex(0x3c66666666663c00, 3, 1, 1);
+        frame_buffer_insert_hex(0x1818183c66666600, 4, 1, 0);
+        frame_buffer_insert_hex(0x6666667e66663c00, 5, 1, 1);
+        frame_buffer_insert_hex(0x0, 6, 0, 1);
     }
 }
 

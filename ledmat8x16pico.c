@@ -16,7 +16,7 @@
 #define PIN_ROWS_BASE 6
 #define N_ROWS 8
 
-#define N_DISPLAY_MODULES 2
+#define N_DISPLAY_MODULES 3
 // Seems like 10MHz is around the limit for decently shaped pulses with my
 // hardware.
 // Delay after TX FIFO empty must be sufficiently long for the higher frequencies
@@ -70,20 +70,20 @@ void init_frame_buffer() {
 void rotate_frame_buffer(int n) {
     for (int row = 0; row < N_ROWS; row++) {
         // Left most bits of left most module moved to right side of module
-        uint16_t carry = frame_buffer[row][0] >> (16 - n);
+        uint16_t carry = frame_buffer[row][0] << (16 - n);
         uint16_t next_carry;
         for (int module = N_DISPLAY_MODULES - 1; module >= 0;
              module--) { // Start with right most module
             // Left most bit of current module (to be shifted out) moved to right side of module
-            next_carry = frame_buffer[row][module] >> (16 - n);
-            frame_buffer[row][module] = (frame_buffer[row][module] << n) | carry;
+            next_carry = frame_buffer[row][module] << (16 - n);
+            frame_buffer[row][module] = (frame_buffer[row][module] >> n) | carry;
             carry = next_carry; // Update carry for next module to the shifted out bit
         }
     }
 }
 
 bool update_frame_callback(__unused struct repeating_timer *t) {
-    //rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
+    rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
     return true;
 }
 

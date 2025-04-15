@@ -29,6 +29,10 @@
 //              <-- shift direction    left       right    left       right     <-- shift direction
 uint16_t test_pattern[2] = {0b1010101010101010, 0b1101000000000111};
 
+/*uint16_t test_frame[N_ROWS][N_DISPLAY_MODULES] = {*/
+/*    0xc6c6e6f6decec600,*/
+/*};*/
+
 uint16_t frame_buffer[N_ROWS][N_DISPLAY_MODULES];
 
 // Prepare variables to hold references to used PIO, state-machine and PIO
@@ -38,11 +42,28 @@ uint sm_tx = 0;
 
 int dma_chan;
 
+void frame_buffer_insert_hex(uint64_t hex, int n_module) {
+    for (int row = 0; row < N_ROWS; row++) {
+        uint8_t x = 0;
+        uint8_t y = *((uint8_t *)&hex + row);
+        uint16_t z;
+        // Interleave bits
+        // Shamelessly stolen from http://graphics.stanford.edu/~seander/bithacks.html#Interleave64bitOps
+        z = ((x * 0x0101010101010101ULL & 0x8040201008040201ULL) * 0x0102040810204081ULL >> 49) &
+                0x5555 |
+            ((y * 0x0101010101010101ULL & 0x8040201008040201ULL) * 0x0102040810204081ULL >> 48) &
+                0xAAAA;
+
+        frame_buffer[row][n_module] = z;
+    }
+}
+
 void init_frame_buffer() {
     for (int module = 0; module < N_DISPLAY_MODULES; module++) {
-        for (int row = 0; row < N_ROWS; row++) {
-            frame_buffer[row][module] = test_pattern[module % 2];
-        }
+        /*for (int row = 0; row < N_ROWS; row++) {*/
+        /*    frame_buffer[row][module] = test_pattern[module % 2];*/
+        /*}*/
+        frame_buffer_insert_hex(0xff7f3f1f0f070301, 0);
     }
 }
 
@@ -51,7 +72,8 @@ void rotate_frame_buffer(int n) {
         // Left most bits of left most module moved to right side of module
         uint16_t carry = frame_buffer[row][0] >> (16 - n);
         uint16_t next_carry;
-        for (int module = N_DISPLAY_MODULES - 1; module >= 0; module--) { // Start with right most module
+        for (int module = N_DISPLAY_MODULES - 1; module >= 0;
+             module--) { // Start with right most module
             // Left most bit of current module (to be shifted out) moved to right side of module
             next_carry = frame_buffer[row][module] >> (16 - n);
             frame_buffer[row][module] = (frame_buffer[row][module] << n) | carry;
@@ -61,7 +83,7 @@ void rotate_frame_buffer(int n) {
 }
 
 bool update_frame_callback(__unused struct repeating_timer *t) {
-    rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
+    //rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
     return true;
 }
 
@@ -69,7 +91,7 @@ void dma_handler() {
     static bool first_run = true;
 
     static uint8_t current_row = 0;
-    static uint8_t next_row = 1;
+    static uint8_t prev_row = N_ROWS - 1;
 
     if (first_run) {
         first_run = false;
@@ -90,18 +112,18 @@ void dma_handler() {
         busy_wait_us(10);
         gpio_put(PIN_LATCH, 0);
 
-        // Turn off current row
-        gpio_put(PIN_ROWS_BASE + current_row, 1);
-        // Turn on next row
-        gpio_put(PIN_ROWS_BASE + next_row, 0);
+        // Turn off previous row
+        gpio_put(PIN_ROWS_BASE + prev_row, 1);
+        // Turn on current row
+        gpio_put(PIN_ROWS_BASE + current_row, 0);
         gpio_put(PIN_BLANK, 0); // Un-blank the display
 
         // Increase row counters
-        next_row++;
+        prev_row = current_row;
         current_row++;
 
-        if (next_row >= N_ROWS) {
-            next_row = 0;
+        if (prev_row >= N_ROWS) {
+            prev_row = 0;
         }
 
         if (current_row >= N_ROWS) {

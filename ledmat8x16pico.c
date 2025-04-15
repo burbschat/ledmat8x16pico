@@ -103,8 +103,12 @@ void dma_handler() {
         // register and calls sets an IRQ flag when it signals that the TX sm is stalled.
         while (!pio_sm_is_tx_fifo_empty(pio, sm_tx)) {
         }
-        busy_wait_us(
-            5); // Apparently we must wait a little here for the data to properly propagate?
+        // Wait for a little more than 16 other cycles at the used sampling frequency as the wait
+        // above ends when the last sample is moved out of the fifo, into the OSR of the PIO, not
+        // when the OSR is empty.
+        // One extra cycle is sufficient, but rather take to just to be safe.
+        // TODO: Find a better solution for this
+        busy_wait_us(18);
         gpio_put(PIN_BLANK, 1); // Blank the display
         // Strobe latch pin to latch shifted in value
         gpio_put(PIN_LATCH, 1);

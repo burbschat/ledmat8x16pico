@@ -27,9 +27,9 @@
 
 //                                     left most module    right most module
 //              <-- shift direction    left       right    left       right     <-- shift direction
-volatile uint16_t test_pattern[2] = {0b1010101010101010, 0b1101000000000111};
+uint16_t test_pattern[2] = {0b1010101010101010, 0b1101000000000111};
 
-static uint16_t frame_buffer[N_ROWS][N_DISPLAY_MODULES];
+uint16_t frame_buffer[N_ROWS][N_DISPLAY_MODULES];
 
 // Prepare variables to hold references to used PIO, state-machine and PIO
 // program offset

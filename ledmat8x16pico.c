@@ -18,8 +18,9 @@
 #define N_DISPLAY_MODULES 2
 // Seems like 10MHz is around the limit for decently shaped pulses with my
 // hardware.
-// An important factor is for how long we wait
-#define TLC59283_TX_FREQ 500000
+// Delay after TX FIFO empty must be sufficiently long for the higher frequencies
+// it seems. Not an elegant solution, but it works for now...
+#define TLC59283_TX_FREQ 1000000
 
 #define PIN_LED 25
 
@@ -61,6 +62,7 @@ void dma_handler() {
         // register and calls sets an IRQ flag when it signals that the TX sm is stalled.
         while (!pio_sm_is_tx_fifo_empty(pio, sm_tx)) {
         }
+        busy_wait_us(5); // Apparently we must wait a little here for the data to properly propagate?
         gpio_put(PIN_BLANK, 1); // Blank the display
         // Strobe latch pin to latch shifted in value
         gpio_put(PIN_LATCH, 1);

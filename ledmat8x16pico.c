@@ -4,6 +4,7 @@
 #include "pico/stdlib.h"
 #include "tlc59283.pio.h"
 #include <stdio.h>
+#include <string.h>
 
 // Both pins must be on the same GPIO group (0->31 or 16->47) as "No single PIO
 // instance can interact with both pins 0->15 or 32->47 at the same time." for
@@ -24,9 +25,11 @@
 
 #define PIN_LED 25
 
-//                                     module n - 1        module n - 2      ...
-//                                     left       right    left       right
-volatile uint16_t test_pattern[2] = {0b1010101010101010, 0b1100000000000011};
+//                                     left most module    right most module
+//              <-- shift direction    left       right    left       right     <-- shift direction
+volatile uint16_t test_pattern[2] = {0b1010101010101010, 0b1101000000000111};
+
+static uint16_t frame_buffer[N_ROWS][N_DISPLAY_MODULES];
 
 // Prepare variables to hold references to used PIO, state-machine and PIO
 // program offset
@@ -35,14 +38,30 @@ uint sm_tx = 0;
 
 int dma_chan;
 
-void rotate_test_pattern() {
-    // Rotate a 32 bit test pattern
-    uint32_t x = *(uint32_t *)test_pattern, n = 2;
-    *(uint32_t *)test_pattern = (x << n) | (x >> (32 - n));
+void init_frame_buffer() {
+    for (int module = 0; module < N_DISPLAY_MODULES; module++) {
+        for (int row = 0; row < N_ROWS; row++) {
+            frame_buffer[row][module] = test_pattern[module % 2];
+        }
+    }
+}
+
+void rotate_frame_buffer(int n) {
+    for (int row = 0; row < N_ROWS; row++) {
+        // Left most bits of left most module moved to right side of module
+        uint16_t carry = frame_buffer[row][0] >> (16 - n);
+        uint16_t next_carry;
+        for (int module = N_DISPLAY_MODULES - 1; module >= 0; module--) { // Start with right most module
+            // Left most bit of current module (to be shifted out) moved to right side of module
+            next_carry = frame_buffer[row][module] >> (16 - n);
+            frame_buffer[row][module] = (frame_buffer[row][module] << n) | carry;
+            carry = next_carry; // Update carry for next module to the shifted out bit
+        }
+    }
 }
 
 bool update_frame_callback(__unused struct repeating_timer *t) {
-    rotate_test_pattern();
+    rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
     return true;
 }
 
@@ -62,7 +81,8 @@ void dma_handler() {
         // register and calls sets an IRQ flag when it signals that the TX sm is stalled.
         while (!pio_sm_is_tx_fifo_empty(pio, sm_tx)) {
         }
-        busy_wait_us(5); // Apparently we must wait a little here for the data to properly propagate?
+        busy_wait_us(
+            5); // Apparently we must wait a little here for the data to properly propagate?
         gpio_put(PIN_BLANK, 1); // Blank the display
         // Strobe latch pin to latch shifted in value
         gpio_put(PIN_LATCH, 1);
@@ -91,7 +111,7 @@ void dma_handler() {
     // Clear the interrupt request
     dma_hw->ints0 = 1u << dma_chan;
     // Dispatch DMA with the next data
-    dma_channel_set_read_addr(dma_chan, test_pattern, true);
+    dma_channel_set_read_addr(dma_chan, frame_buffer[current_row], true);
 }
 
 int main() {
@@ -113,6 +133,9 @@ int main() {
         gpio_set_dir(PIN_ROWS_BASE + i, GPIO_OUT);
         gpio_put(PIN_ROWS_BASE + i, 1); // Initialize with all rows off (pins high)
     }
+
+    // Initialize frame buffer
+    init_frame_buffer();
 
     // This will find a free pio and state machine for our program and load it for us
     // We use pio_claim_free_sm_and_add_program_for_gpio_range (for_gpio_range variant)

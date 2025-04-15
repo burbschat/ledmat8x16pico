@@ -27,6 +27,11 @@
 //                                     left       right    left       right
 volatile uint16_t test_pattern[2] = {0b1010101010101010, 0b1100000000000011};
 
+// Prepare variables to hold references to used PIO, state-machine and PIO
+// program offset
+PIO pio = pio0;
+uint sm_tx = 0;
+
 int dma_chan;
 
 void rotate_test_pattern() {
@@ -49,8 +54,12 @@ void dma_handler() {
     if (first_run) {
         first_run = false;
     } else {
-        // TODO: Replace with wait on TX FIFO empty, or even better, call the callback on TX FIFO empty (which should imply that the dma is finished)
-        busy_wait_us(1000); 
+        // TODO: Try to somehow call this callback on TX FIFO empty (which should imply that the dma
+        // is finished). This however does appear to be non-trivial as, while there are registers
+        // to check if we are stalled on empty TX FIFO (e.g. TXSTALL), they cannot directly call an 
+        // interrupt. The best solution I can think of is to have a separate PIO sm that polls the 
+        // register and calls sets an IRQ flag when it signals that the TX sm is stalled.
+        while(!pio_sm_is_tx_fifo_empty(pio, sm_tx)){}
         gpio_put(PIN_BLANK, 1); // Blank the display
         // Strobe latch pin to latch shifted in value
         gpio_put(PIN_LATCH, 1); 
@@ -100,11 +109,6 @@ int main() {
         gpio_set_dir(PIN_ROWS_BASE + i, GPIO_OUT);
         gpio_put(PIN_ROWS_BASE + i, 1);  // Initialize with all rows off (pins high)
     }
-
-    // Prepare variables to hold references to used PIO, state-machine and PIO
-    // program offset
-    PIO pio = pio0;
-    uint sm_tx = 0;
 
     // This will find a free pio and state machine for our program and load it for us
     // We use pio_claim_free_sm_and_add_program_for_gpio_range (for_gpio_range variant)

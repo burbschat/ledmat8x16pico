@@ -46,9 +46,10 @@ static inline void tlc59283_tx_program_init(PIO pio, uint sm, uint offset, uint 
     sm_config_set_out_pins(&c, pin_data, 1);
     // Set the clock pin as a sideset pin
     sm_config_set_sideset_pins(&c, pin_clk);
-    // Set false for shift to right, true for autopull enable, 16 for autopull
-    // threshold (16 bits per tile and row)
-    sm_config_set_out_shift(&c, false, true, 16);
+    // Set true for shift to right, true for autopull enable, 32 for autopull
+    // threshold (16 bits per tile and row, but may shift two at a time not not
+    // waste buffer spaces)
+    sm_config_set_out_shift(&c, true, true, 16);
 
     // Join FIFOs to get larger length as we won't need the RX FIFO.
     // TX FIFO length=8 is used for transmit, RX FIFO is disabled.

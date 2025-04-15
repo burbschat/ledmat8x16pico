@@ -27,4 +27,4 @@ pico_enable_stdio_uart(ledmat8x16pico 1)
 pico_add_extra_outputs(ledmat8x16pico)
 
 # Set libraries to link against
-target_link_libraries(ledmat8x16pico PRIVATE pico_stdlib hardware_pio)
+target_link_libraries(ledmat8x16pico PRIVATE pico_stdlib hardware_pio hardware_dma)

@@ -116,8 +116,6 @@ int main() {
     // We use pio_claim_free_sm_and_add_program_for_gpio_range (for_gpio_range variant)
     // so we will get a PIO instance suitable for addressing gpios >= 32 if needed and supported by
     // the hardware
-    // bool success = pio_claim_free_sm_and_add_program_for_gpio_range(&tlc59283_tx_program, &pio,
-    // &sm, &offset, PIN_CLK, 1, true); hard_assert(success);
     uint offset_tx = pio_add_program(pio, &tlc59283_tx_program);
 
     tlc59283_tx_program_init(pio, sm_tx, offset_tx, PIN_CLK, PIN_DATA, TLC59283_TX_FREQ);
@@ -153,41 +151,6 @@ int main() {
 
     // Manually call the handler once, to trigger the first transfer
     dma_handler();
-
-    /*while(1) {*/
-    /*    gpio_put(PIN_LED, 0);*/
-    /*    // puts("Hello World\n");*/
-    /**/
-    /*    pio_sm_put_blocking(pio, sm_tx, test_pattern);*/
-    /*    sleep_us(100);*/
-    /**/
-    /*    // Latch the shifted in value. Later we want to do this using an interrupt.*/
-    /*    gpio_put(PIN_BLANK, 1); // Blank the display*/
-    /*    gpio_put(PIN_LATCH, 1);*/
-    /*    sleep_us(10);*/
-    /*    gpio_put(PIN_LATCH, 0);*/
-    /**/
-    /*    // Turn off current row*/
-    /*    gpio_put(PIN_ROWS_BASE + current_row, 1);*/
-    /*    // Turn on next row*/
-    /*    gpio_put(PIN_ROWS_BASE + next_row, 0);*/
-    /*    gpio_put(PIN_BLANK, 0); // Un-blank the display*/
-    /**/
-    /*    // Increase row counters*/
-    /*    next_row++;*/
-    /*    current_row++;*/
-    /**/
-    /*    if (next_row >= N_ROWS) {*/
-    /*        next_row = 0;*/
-    /*    }*/
-    /**/
-    /*    if (current_row >= N_ROWS) {*/
-    /*        current_row = 0;*/
-    /*    }*/
-    /**/
-    /*    gpio_put(PIN_LED, 1);*/
-    /*    // sleep_ms(1);*/
-    /*}*/
 
     // Everything else from this point is interrupt-driven. The processor has
     // time to sit and think about its early retirement -- maybe open a bakery?

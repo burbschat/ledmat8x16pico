@@ -1,9 +1,9 @@
-#include <stdio.h>
-#include "pico/stdlib.h"
+#include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
-#include "hardware/dma.h"
+#include "pico/stdlib.h"
 #include "tlc59283.pio.h"
+#include <stdio.h>
 
 // Both pins must be on the same GPIO group (0->31 or 16->47) as "No single PIO
 // instance can interact with both pins 0->15 or 32->47 at the same time." for
@@ -17,8 +17,8 @@
 
 #define N_DISPLAY_MODULES 2
 // Seems like 10MHz is around the limit for decently shaped pulses with my
-// hardware. 
-// An important factor is for how long we wait 
+// hardware.
+// An important factor is for how long we wait
 #define TLC59283_TX_FREQ 500000
 
 #define PIN_LED 25
@@ -36,8 +36,8 @@ int dma_chan;
 
 void rotate_test_pattern() {
     // Rotate a 32 bit test pattern
-    uint32_t x = *(uint32_t*)test_pattern, n = 2;
-    *(uint32_t*)test_pattern = (x << n) | (x >> (32 - n));
+    uint32_t x = *(uint32_t *)test_pattern, n = 2;
+    *(uint32_t *)test_pattern = (x << n) | (x >> (32 - n));
 }
 
 bool update_frame_callback(__unused struct repeating_timer *t) {
@@ -56,13 +56,14 @@ void dma_handler() {
     } else {
         // TODO: Try to somehow call this callback on TX FIFO empty (which should imply that the dma
         // is finished). This however does appear to be non-trivial as, while there are registers
-        // to check if we are stalled on empty TX FIFO (e.g. TXSTALL), they cannot directly call an 
-        // interrupt. The best solution I can think of is to have a separate PIO sm that polls the 
+        // to check if we are stalled on empty TX FIFO (e.g. TXSTALL), they cannot directly call an
+        // interrupt. The best solution I can think of is to have a separate PIO sm that polls the
         // register and calls sets an IRQ flag when it signals that the TX sm is stalled.
-        while(!pio_sm_is_tx_fifo_empty(pio, sm_tx)){}
+        while (!pio_sm_is_tx_fifo_empty(pio, sm_tx)) {
+        }
         gpio_put(PIN_BLANK, 1); // Blank the display
         // Strobe latch pin to latch shifted in value
-        gpio_put(PIN_LATCH, 1); 
+        gpio_put(PIN_LATCH, 1);
         // For some reason sleep_us here does not work (at least when I have a debugger connected)
         busy_wait_us(10);
         gpio_put(PIN_LATCH, 0);
@@ -102,19 +103,21 @@ int main() {
 
     gpio_init(PIN_BLANK);
     gpio_set_dir(PIN_BLANK, GPIO_OUT);
-    gpio_put(PIN_BLANK, 0);  // Must be pulled low. Leaving it floating did cause problems (blank always asserted).
+    // Must be pulled low. Leaving it floating did cause problems (blank always asserted).
+    gpio_put(PIN_BLANK, 0);
 
     for (int i = 0; i < N_ROWS; i++) {
         gpio_init(PIN_ROWS_BASE + i);
         gpio_set_dir(PIN_ROWS_BASE + i, GPIO_OUT);
-        gpio_put(PIN_ROWS_BASE + i, 1);  // Initialize with all rows off (pins high)
+        gpio_put(PIN_ROWS_BASE + i, 1); // Initialize with all rows off (pins high)
     }
 
     // This will find a free pio and state machine for our program and load it for us
     // We use pio_claim_free_sm_and_add_program_for_gpio_range (for_gpio_range variant)
-    // so we will get a PIO instance suitable for addressing gpios >= 32 if needed and supported by the hardware
-    //bool success = pio_claim_free_sm_and_add_program_for_gpio_range(&tlc59283_tx_program, &pio, &sm, &offset, PIN_CLK, 1, true);
-    //hard_assert(success);
+    // so we will get a PIO instance suitable for addressing gpios >= 32 if needed and supported by
+    // the hardware
+    // bool success = pio_claim_free_sm_and_add_program_for_gpio_range(&tlc59283_tx_program, &pio,
+    // &sm, &offset, PIN_CLK, 1, true); hard_assert(success);
     uint offset_tx = pio_add_program(pio, &tlc59283_tx_program);
 
     tlc59283_tx_program_init(pio, sm_tx, offset_tx, PIN_CLK, PIN_DATA, TLC59283_TX_FREQ);
@@ -126,11 +129,11 @@ int main() {
     dma_channel_config c = dma_channel_get_default_config(dma_chan);
     channel_config_set_transfer_data_size(&c, DMA_SIZE_16); // One module has 16 columns
     channel_config_set_read_increment(&c, true); // Increment read address after each written block
-    channel_config_set_dreq(&c, DREQ_PIO0_TX0); // Use data request signal from PIO0 TX FIFO (must be matched to used pio!)
+    // Use data request signal from PIO0 TX FIFO (must be matched to used pio!)
+    channel_config_set_dreq(&c, DREQ_PIO0_TX0);
 
     dma_channel_configure(
-        dma_chan,
-        &c,
+        dma_chan, &c,
         &pio0_hw->txf[0],  // Write address (only need to set this once)
         NULL,              // Don't provide a read address yet
         N_DISPLAY_MODULES, // Write the same value many times, then halt and interrupt
@@ -186,11 +189,9 @@ int main() {
     /*    // sleep_ms(1);*/
     /*}*/
 
-
     // Everything else from this point is interrupt-driven. The processor has
     // time to sit and think about its early retirement -- maybe open a bakery?
-    while (true)
-        tight_loop_contents();
+    while (true) tight_loop_contents();
 
     // This will free resources and unload our program.
     // Technically the program never reaches this point but keep the line here

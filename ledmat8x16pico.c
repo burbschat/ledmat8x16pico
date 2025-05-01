@@ -16,7 +16,7 @@
 #define PIN_ROWS_BASE 6
 #define N_ROWS 8
 
-#define N_DISPLAY_MODULES 7
+#define N_DISPLAY_MODULES 1
 // Seems like 10MHz is around the limit for decently shaped pulses with my
 // hardware.
 // Delay after TX FIFO empty must be sufficiently long for the higher frequencies
@@ -66,16 +66,16 @@ void frame_buffer_insert_hex(uint64_t hex, int n_module, bool r, bool g) {
 
 void init_frame_buffer() {
     for (int module = 0; module < N_DISPLAY_MODULES; module++) {
-        /*for (int row = 0; row < N_ROWS; row++) {*/
-        /*    frame_buffer[row][module] = test_pattern[module % 2];*/
-        /*}*/
-        frame_buffer_insert_hex(0xc6c6e6f6decec600, 0, 1, 0);
-        frame_buffer_insert_hex(0x6666667e66663c00, 1, 1, 1);
-        frame_buffer_insert_hex(0x3c66760606663c00, 2, 0, 1);
-        frame_buffer_insert_hex(0x3c66666666663c00, 3, 1, 1);
-        frame_buffer_insert_hex(0x1818183c66666600, 4, 1, 0);
-        frame_buffer_insert_hex(0x6666667e66663c00, 5, 1, 1);
-        frame_buffer_insert_hex(0x0, 6, 0, 1);
+        for (int row = 0; row < N_ROWS; row++) {
+            frame_buffer[row][module] = test_pattern[module % 2];
+        }
+        // frame_buffer_insert_hex(0xc6c6e6f6decec600, 0, 1, 0);
+        // frame_buffer_insert_hex(0x6666667e66663c00, 1, 1, 1);
+        // frame_buffer_insert_hex(0x3c66760606663c00, 2, 0, 1);
+        // frame_buffer_insert_hex(0x3c66666666663c00, 3, 1, 1);
+        // frame_buffer_insert_hex(0x1818183c66666600, 4, 1, 0);
+        // frame_buffer_insert_hex(0x6666667e66663c00, 5, 1, 1);
+        // frame_buffer_insert_hex(0x0, 6, 0, 1);
     }
 }
 
@@ -95,7 +95,7 @@ void rotate_frame_buffer(int n) {
 }
 
 bool update_frame_callback(__unused struct repeating_timer *t) {
-    rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
+    // rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
     return true;
 }
 
@@ -113,14 +113,14 @@ void dma_handler() {
         // to check if we are stalled on empty TX FIFO (e.g. TXSTALL), they cannot directly call an
         // interrupt. The best solution I can think of is to have a separate PIO sm that polls the
         // register and calls sets an IRQ flag when it signals that the TX sm is stalled.
-        while (!pio_sm_is_tx_fifo_empty(pio, sm_tx)) {
-        }
+        //while (!pio_sm_is_tx_fifo_empty(pio, sm_tx)) {
+        //}
         // Wait for a little more than 16 other cycles at the used sampling frequency as the wait
         // above ends when the last sample is moved out of the fifo, into the OSR of the PIO, not
         // when the OSR is empty.
         // One extra cycle is sufficient, but rather take to just to be safe.
         // TODO: Find a better solution for this
-        busy_wait_us(18);
+        //busy_wait_us(18);
         gpio_put(PIN_BLANK, 1); // Blank the display
         // Strobe latch pin to latch shifted in value
         gpio_put(PIN_LATCH, 1);
@@ -147,9 +147,16 @@ void dma_handler() {
         }
     }
     // Clear the interrupt request
-    dma_hw->ints0 = 1u << dma_chan;
+    //dma_hw->ints0 = 1u << dma_chan;
+
     // Dispatch DMA with the next data
     dma_channel_set_read_addr(dma_chan, frame_buffer[current_row], true);
+
+    busy_wait_us(18);
+
+    // Clear PIO interrupt (and NVIC)
+    pio_interrupt_clear(pio, 0);
+    irq_clear(PIO0_IRQ_0);
 }
 
 int main() {
@@ -175,16 +182,6 @@ int main() {
     // Initialize frame buffer
     init_frame_buffer();
 
-    // This will find a free pio and state machine for our program and load it for us
-    // We use pio_claim_free_sm_and_add_program_for_gpio_range (for_gpio_range variant)
-    // so we will get a PIO instance suitable for addressing gpios >= 32 if needed and supported by
-    // the hardware
-    uint offset_tx = pio_add_program(pio, &tlc59283_tx_program);
-
-    tlc59283_tx_program_init(pio, sm_tx, offset_tx, PIN_CLK, PIN_DATA, TLC59283_TX_FREQ);
-
-    sleep_ms(10);
-
     // Setup DMA
     dma_chan = dma_claim_unused_channel(true);
     dma_channel_config c = dma_channel_get_default_config(dma_chan);
@@ -202,18 +199,40 @@ int main() {
     );
 
     // Tell the DMA to raise IRQ line 0 when the channel finishes a block
-    dma_channel_set_irq0_enabled(dma_chan, true);
+    // dma_channel_set_irq0_enabled(dma_chan, true);
 
     // Configure the processor to run dma_handler() when DMA IRQ 0 is asserted
-    irq_set_exclusive_handler(DMA_IRQ_0, dma_handler);
-    irq_set_enabled(DMA_IRQ_0, true);
+    // irq_set_exclusive_handler(DMA_IRQ_0, dma_done);
+    // irq_set_enabled(DMA_IRQ_0, true);
+
+    // This will find a free pio and state machine for our program and load it for us
+    // We use pio_claim_free_sm_and_add_program_for_gpio_range (for_gpio_range variant)
+    // so we will get a PIO instance suitable for addressing gpios >= 32 if needed and supported by
+    // the hardware
+    uint offset_tx = pio_add_program(pio, &tlc59283_tx_program);
+
+    // Have irq trigger an interrupt
+    // pis_interrupt0 SUPPOSEDLY! referes to PIO interrupt 0 (the one we use)
+    pio_set_irq0_source_enabled(pio, (enum pio_interrupt_source) ((uint) pis_interrupt0 + sm_tx), true);
+    // Setup handler to be called on pio interrupt
+    // Unique handler should actually be fine?
+    irq_add_shared_handler(PIO0_IRQ_0, dma_handler, 0);
+    // Clear interrupt nr zero
+    pio_interrupt_clear(pio, 0);
+    irq_clear(PIO0_IRQ_0);
+    // Enablle PIO IRQ interrupt
+    irq_set_enabled(PIO0_IRQ_0, true);
+
+    tlc59283_tx_program_init(pio, sm_tx, offset_tx, PIN_CLK, PIN_DATA, TLC59283_TX_FREQ);
+
+    sleep_ms(10);
 
     // Setup timer for frame refresh callback
     struct repeating_timer timer;
     add_repeating_timer_ms(50, update_frame_callback, NULL, &timer);
 
     // Manually call the handler once, to trigger the first transfer
-    dma_handler();
+    //dma_handler();
 
     // Everything else from this point is interrupt-driven. The processor has
     // time to sit and think about its early retirement -- maybe open a bakery?

@@ -16,7 +16,7 @@
 #define PIN_ROWS_BASE 6
 #define N_ROWS 8
 
-#define N_DISPLAY_MODULES 1
+#define N_DISPLAY_MODULES 2
 // Seems like 10MHz is around the limit for decently shaped pulses with my
 // hardware.
 // Delay after TX FIFO empty must be sufficiently long for the higher frequencies
@@ -66,11 +66,11 @@ void frame_buffer_insert_hex(uint64_t hex, int n_module, bool r, bool g) {
 
 void init_frame_buffer() {
     for (int module = 0; module < N_DISPLAY_MODULES; module++) {
-        for (int row = 0; row < N_ROWS; row++) {
-            frame_buffer[row][module] = test_pattern[module % 2];
-        }
-        // frame_buffer_insert_hex(0xc6c6e6f6decec600, 0, 1, 0);
-        // frame_buffer_insert_hex(0x6666667e66663c00, 1, 1, 1);
+        // for (int row = 0; row < N_ROWS; row++) {
+        //     frame_buffer[row][module] = test_pattern[module % 2];
+        // }
+        frame_buffer_insert_hex(0xc6c6e6f6decec600, 0, 1, 0);
+        frame_buffer_insert_hex(0x6666667e66663c00, 1, 1, 1);
         // frame_buffer_insert_hex(0x3c66760606663c00, 2, 0, 1);
         // frame_buffer_insert_hex(0x3c66666666663c00, 3, 1, 1);
         // frame_buffer_insert_hex(0x1818183c66666600, 4, 1, 0);
@@ -95,7 +95,7 @@ void rotate_frame_buffer(int n) {
 }
 
 bool update_frame_callback(__unused struct repeating_timer *t) {
-    // rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
+    rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
     return true;
 }
 

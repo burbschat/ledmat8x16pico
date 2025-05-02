@@ -16,7 +16,7 @@
 #define PIN_ROWS_BASE 6
 #define N_ROWS 8
 
-#define N_DISPLAY_MODULES 2
+#define N_DISPLAY_MODULES 3
 // Seems like 10MHz is around the limit for decently shaped pulses with my
 // hardware.
 // Delay after TX FIFO empty must be sufficiently long for the higher frequencies
@@ -82,7 +82,7 @@ void init_frame_buffer() {
         // }
         frame_buffer_insert_hex(0xc6c6e6f6decec600, 0, 1, 0);
         frame_buffer_insert_hex(0x6666667e66663c00, 1, 1, 1);
-        // frame_buffer_insert_hex(0x3c66760606663c00, 2, 0, 1);
+        frame_buffer_insert_hex(0x3c66760606663c00, 2, 0, 1);
         // frame_buffer_insert_hex(0x3c66666666663c00, 3, 1, 1);
         // frame_buffer_insert_hex(0x1818183c66666600, 4, 1, 0);
         // frame_buffer_insert_hex(0x6666667e66663c00, 5, 1, 1);

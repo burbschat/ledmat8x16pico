@@ -99,7 +99,9 @@ bool update_frame_callback(__unused struct repeating_timer *t) {
     return true;
 }
 
-void dma_handler() {
+void row_done_handler() {
+    // This callback is called when one row is done (meaning all bits have been shifted out, not
+    // just fifo empty!)
     static bool first_run = true;
 
     static uint8_t current_row = 0;
@@ -108,19 +110,6 @@ void dma_handler() {
     if (first_run) {
         first_run = false;
     } else {
-        // TODO: Try to somehow call this callback on TX FIFO empty (which should imply that the dma
-        // is finished). This however does appear to be non-trivial as, while there are registers
-        // to check if we are stalled on empty TX FIFO (e.g. TXSTALL), they cannot directly call an
-        // interrupt. The best solution I can think of is to have a separate PIO sm that polls the
-        // register and calls sets an IRQ flag when it signals that the TX sm is stalled.
-        //while (!pio_sm_is_tx_fifo_empty(pio, sm_tx)) {
-        //}
-        // Wait for a little more than 16 other cycles at the used sampling frequency as the wait
-        // above ends when the last sample is moved out of the fifo, into the OSR of the PIO, not
-        // when the OSR is empty.
-        // One extra cycle is sufficient, but rather take to just to be safe.
-        // TODO: Find a better solution for this
-        //busy_wait_us(18);
         gpio_put(PIN_BLANK, 1); // Blank the display
         // Strobe latch pin to latch shifted in value
         gpio_put(PIN_LATCH, 1);
@@ -214,7 +203,7 @@ int main() {
     pio_set_irq0_source_enabled(pio, (enum pio_interrupt_source) ((uint) pis_interrupt0 + sm_tx), true);
     // Setup handler to be called on pio interrupt
     // Unique handler should actually be fine?
-    irq_add_shared_handler(PIO0_IRQ_0, dma_handler, 0);
+    irq_add_shared_handler(PIO0_IRQ_0, row_done_handler, 0);
     // Clear interrupt nr zero
     pio_interrupt_clear(pio, 0);
     irq_clear(PIO0_IRQ_0);

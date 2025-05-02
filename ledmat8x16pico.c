@@ -125,8 +125,6 @@ void __not_in_flash_func(row_done_handler)() {
         gpio_put(PIN_BLANK, 1); // Blank the display
         // Strobe latch pin to latch shifted in value
         gpio_put(PIN_LATCH, 1);
-        // For some reason sleep_us here does not work (at least when I have a debugger connected)
-        busy_wait_us(10);
         gpio_put(PIN_LATCH, 0);
 
         // Turn off previous row
@@ -134,6 +132,15 @@ void __not_in_flash_func(row_done_handler)() {
         // Turn on current row
         gpio_put(PIN_ROWS_BASE + current_row, 0);
         gpio_put(PIN_BLANK, 0); // Un-blank the display
+
+        // Wait a little to set how long each row is displayed.
+        // Must use busy_wait_ms (sleep_ms cannot be used in interrupt handler)
+        // Pulsing rows too fast seems to result in very annoying audible noise from the LED module.
+        // 5 ms per row seems to mitigate this to a tolerable level (lower frequency).
+        // Not exactly sure if this is caused by the LEDs or the MOSFETs driving the rows.
+        // Disconnecting LEDs causes the noise to vanish, but a MOSFET without load may as well be
+        // quiet. Have to try with some different load (e.g. resistors).
+        busy_wait_ms(5);
 
         // Increase row counters
         prev_row = current_row;

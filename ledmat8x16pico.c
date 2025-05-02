@@ -110,7 +110,8 @@ bool update_frame_callback(__unused struct repeating_timer *t) {
     return true;
 }
 
-void row_done_handler() {
+// Set as not in flash just in case, does not seem to make much of a difference though.
+void __not_in_flash_func(row_done_handler)() {
     // This callback is called when one row is done (meaning all bits have been shifted out, not
     // just fifo empty!)
     static bool first_run = true;

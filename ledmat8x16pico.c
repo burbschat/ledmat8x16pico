@@ -74,7 +74,7 @@ void set_row_length(uint16_t length) {
 
 void init_frame_buffer() {
     // Populate row length headers in frame buffer. They are all the same number, but to ease
-    // passing the data via dma we duplicat the header for each row.
+    // passing the data via dma we duplicate the header for each row.
     set_row_length(N_DISPLAY_MODULES * 16);
     for (int module = 0; module < N_DISPLAY_MODULES; module++) {
         // for (int row = 0; row < N_ROWS; row++) {

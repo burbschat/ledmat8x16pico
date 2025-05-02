@@ -150,7 +150,7 @@ void row_done_handler() {
     //dma_hw->ints0 = 1u << dma_chan;
 
     // Dispatch DMA with the next data
-    dma_channel_set_read_addr(dma_chan, &frame_buffer[current_row][1], true);
+    dma_channel_set_read_addr(dma_chan, frame_buffer[current_row], true);
 
     // Clear PIO interrupt (and NVIC)
     pio_interrupt_clear(pio, 0);
@@ -192,7 +192,7 @@ int main() {
         dma_chan, &c,
         &pio0_hw->txf[0],  // Write address (only need to set this once)
         NULL,              // Don't provide a read address yet
-        N_DISPLAY_MODULES, // Write the same value many times, then halt and interrupt
+        N_DISPLAY_MODULES + 1, // Write the same value many times, then halt and interrupt
         false              // Don't start yet
     );
 

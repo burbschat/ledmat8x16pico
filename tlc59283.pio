@@ -13,7 +13,7 @@
 .wrap_target
 preset_counter:
     irq wait 0      side 0
-    set x 31        side 0
+    out x, 16       side 0
 tx_loop:
     ; This is a serial protocol, so shift one bit from output FIFO to DATA pin
     ; We place the data bit change in the middle here, just for simplicity. It

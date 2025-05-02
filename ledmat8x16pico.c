@@ -140,7 +140,7 @@ void __not_in_flash_func(row_done_handler)() {
         // Not exactly sure if this is caused by the LEDs or the MOSFETs driving the rows.
         // Disconnecting LEDs causes the noise to vanish, but a MOSFET without load may as well be
         // quiet. Have to try with some different load (e.g. resistors).
-        busy_wait_ms(5);
+        busy_wait_ms(1);
 
         // Increase row counters
         prev_row = current_row;

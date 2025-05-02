@@ -64,7 +64,18 @@ void frame_buffer_insert_hex(uint64_t hex, int n_module, bool r, bool g) {
     }
 }
 
+void set_row_length(uint16_t length) {
+    // Set the row length entries in the frame buffer (all the same value)
+    for (int row = 0; row < N_ROWS; row++) {
+        // First column actually contains the counter preset values, which are the row length - 1
+        frame_buffer[row][0] = length - 1;
+    }
+}
+
 void init_frame_buffer() {
+    // Populate row length headers in frame buffer. They are all the same number, but to ease
+    // passing the data via dma we duplicat the header for each row.
+    set_row_length(N_DISPLAY_MODULES * 16);
     for (int module = 0; module < N_DISPLAY_MODULES; module++) {
         // for (int row = 0; row < N_ROWS; row++) {
         //     frame_buffer[row][module + 1] = test_pattern[module % 2];

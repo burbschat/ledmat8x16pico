@@ -33,7 +33,7 @@ uint16_t test_pattern[2] = {0b1010101010101010, 0b1101000000000111};
 /*    0xc6c6e6f6decec600,*/
 /*};*/
 
-uint16_t frame_buffer[N_ROWS][N_DISPLAY_MODULES];
+uint16_t frame_buffer[N_ROWS][N_DISPLAY_MODULES + 1];
 
 // Prepare variables to hold references to used PIO, state-machine and PIO
 // program offset
@@ -60,14 +60,14 @@ void frame_buffer_insert_hex(uint64_t hex, int n_module, bool r, bool g) {
             ((y * 0x0101010101010101ULL & 0x8040201008040201ULL) * 0x0102040810204081ULL >> 48) &
                 0xAAAA;
 
-        frame_buffer[row][n_module] = z;
+        frame_buffer[row][n_module + 1] = z;
     }
 }
 
 void init_frame_buffer() {
     for (int module = 0; module < N_DISPLAY_MODULES; module++) {
         // for (int row = 0; row < N_ROWS; row++) {
-        //     frame_buffer[row][module] = test_pattern[module % 2];
+        //     frame_buffer[row][module + 1] = test_pattern[module % 2];
         // }
         frame_buffer_insert_hex(0xc6c6e6f6decec600, 0, 1, 0);
         frame_buffer_insert_hex(0x6666667e66663c00, 1, 1, 1);
@@ -82,13 +82,13 @@ void init_frame_buffer() {
 void rotate_frame_buffer(int n) {
     for (int row = 0; row < N_ROWS; row++) {
         // Left most bits of left most module moved to right side of module
-        uint16_t carry = frame_buffer[row][0] << (16 - n);
+        uint16_t carry = frame_buffer[row][0 + 1] << (16 - n);
         uint16_t next_carry;
         for (int module = N_DISPLAY_MODULES - 1; module >= 0;
              module--) { // Start with right most module
             // Left most bit of current module (to be shifted out) moved to right side of module
-            next_carry = frame_buffer[row][module] << (16 - n);
-            frame_buffer[row][module] = (frame_buffer[row][module] >> n) | carry;
+            next_carry = frame_buffer[row][module + 1] << (16 - n);
+            frame_buffer[row][module + 1] = (frame_buffer[row][module + 1] >> n) | carry;
             carry = next_carry; // Update carry for next module to the shifted out bit
         }
     }
@@ -139,7 +139,7 @@ void row_done_handler() {
     //dma_hw->ints0 = 1u << dma_chan;
 
     // Dispatch DMA with the next data
-    dma_channel_set_read_addr(dma_chan, frame_buffer[current_row], true);
+    dma_channel_set_read_addr(dma_chan, &frame_buffer[current_row][1], true);
 
     // Clear PIO interrupt (and NVIC)
     pio_interrupt_clear(pio, 0);

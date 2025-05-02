@@ -152,8 +152,6 @@ void dma_handler() {
     // Dispatch DMA with the next data
     dma_channel_set_read_addr(dma_chan, frame_buffer[current_row], true);
 
-    busy_wait_us(18);
-
     // Clear PIO interrupt (and NVIC)
     pio_interrupt_clear(pio, 0);
     irq_clear(PIO0_IRQ_0);

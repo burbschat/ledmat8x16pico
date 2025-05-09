@@ -211,6 +211,7 @@ int main() {
     dma_channel_config piodma_conf = dma_channel_get_default_config(piodma_chan);
     channel_config_set_transfer_data_size(&piodma_conf, DMA_SIZE_16); // One module has 16 columns
     channel_config_set_read_increment(&piodma_conf, true); // Increment read address after each written block
+    channel_config_set_write_increment(&piodma_conf, false); // Increment read address after each written block
     // Use data request signal from PIO0 TX FIFO (must be matched to used pio!)
     channel_config_set_dreq(&piodma_conf, DREQ_PIO0_TX0);
 

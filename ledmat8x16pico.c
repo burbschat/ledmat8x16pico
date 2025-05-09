@@ -23,6 +23,12 @@
 // it seems. Not an elegant solution, but it works for now...
 #define TLC59283_TX_FREQ 1000000
 
+// Consider 16 for data bits as this corresponds to exactly the module width
+#define UART_BAUD_RATE 115200
+#define UART_DATA_BITS 8
+#define UART_PARITY UART_PARITY_NONE
+#define UART_STOP_BITS 1
+
 #define PIN_LED 25
 
 #define UART_ID uart0
@@ -120,7 +126,7 @@ void rotate_frame_buffer(int n) {
 }
 
 bool update_frame_callback(__unused struct repeating_timer *t) {
-    //rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
+    rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
     return true;
 }
 
@@ -241,11 +247,13 @@ int main() {
     
     // Setup UART for receiving frame data
     // Set up our UART with a basic baud rate.
-    uart_init(UART_ID, 115200);
+    uart_init(UART_ID, UART_BAUD_RATE);
     // Set the TX and RX pins by using the function select on the GPIO
     // Set datasheet for more information on function select
     gpio_set_function(UART_TX_PIN, UART_FUNCSEL_NUM(UART_ID, UART_TX_PIN));
     gpio_set_function(UART_RX_PIN, UART_FUNCSEL_NUM(UART_ID, UART_RX_PIN));
+    // Set our data format
+    uart_set_format(UART_ID, UART_DATA_BITS, UART_STOP_BITS, UART_PARITY);
 
     // Setup DMA for use with UART
     uartdma_chan = dma_claim_unused_channel(true);

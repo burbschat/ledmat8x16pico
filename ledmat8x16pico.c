@@ -241,7 +241,7 @@ int main() {
     uartdma_chan = dma_claim_unused_channel(true);
     dma_channel_config uartdma_conf = dma_channel_get_default_config(uartdma_chan);
     channel_config_set_transfer_data_size(&piodma_conf, DMA_SIZE_16); // One module has 16 columns
-    // channel_config_set_read_increment(&rx_config, false); // False is default?
+    channel_config_set_read_increment(&uartdma_conf, false); // False is default?
     channel_config_set_write_increment(&uartdma_conf, true);
     // Consider use of ring buffer?
     // Get data from UART RX

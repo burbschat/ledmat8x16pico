@@ -1,0 +1,3 @@
+[submodule "scripts/fonts/ibmfonts"]
+	path = scripts/fonts/ibmfonts
+	url = https://github.com/farsil/ibmfonts

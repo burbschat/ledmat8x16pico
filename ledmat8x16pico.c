@@ -42,11 +42,11 @@ uint16_t test_pattern[2] = {0b1010101010101010, 0b1101000000000111};
 /*};*/
 
 // Frame buffer currently displayed
-uint16_t frame_buffer[N_ROWS][N_DISPLAY_MODULES + 1];
+volatile uint16_t frame_buffer[N_ROWS][N_DISPLAY_MODULES + 1];
 // Frame buffer to be filled via UART, then latched into the actual frame buffer.
 // This should be stored in memory aligned such that rows are just appended in one large continuous
 // region of memory.
-uint16_t frame_buffer_uart_rx[N_ROWS][N_DISPLAY_MODULES + 1];
+volatile uint16_t frame_buffer_uart_rx[N_ROWS][N_DISPLAY_MODULES];
 
 // Prepare variables to hold references to used PIO, state-machine and PIO
 // program offset
@@ -120,7 +120,7 @@ void rotate_frame_buffer(int n) {
 }
 
 bool update_frame_callback(__unused struct repeating_timer *t) {
-    rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
+    //rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
     return true;
 }
 
@@ -179,8 +179,17 @@ void __not_in_flash_func(row_done_handler)() {
     irq_clear(PIO0_IRQ_0);
 }
 
-void __not_in_flash_func(frame_received_handler)() {
-    while (1) {}
+//void __not_in_flash_func(frame_received_handler)() {
+void frame_received_handler() {
+    // Latch rx buffer to actual frame buffer
+    for (int row = 0;row < N_ROWS;row++) {
+        for (int col = 0;col < N_DISPLAY_MODULES;col++) {
+            frame_buffer[row][col + 1] = frame_buffer_uart_rx[row][col];
+        }
+    }
+    // Clear the interrupt
+    dma_hw->ints0 = 1u << uartdma_chan;
+    dma_channel_set_write_addr(uartdma_chan, frame_buffer_uart_rx, true);
 }
 
 int main() {
@@ -251,18 +260,15 @@ int main() {
 
     dma_channel_configure(
         uartdma_chan, &uartdma_conf,
-        NULL, // Dont provide a write address yet
-        &((uart_hw_t *)UART_ID)->dr,
-        N_DISPLAY_MODULES * 8, // Receive one full frame at a time
-        false // Do not start yet
+        frame_buffer_uart_rx, // Dont provide a write address yet
+        &((uart_hw_t *)UART_ID)->dr, // Read address
+        N_DISPLAY_MODULES * 2 * N_ROWS, // Receive one full frame at a time in 8 bit chunks
+        true // Immediately start
     );
     // Enable interrupt via IRQ1 (IRQ0 used for PIO interrupt)
     dma_channel_set_irq1_enabled(uartdma_chan, true);
     irq_set_exclusive_handler(DMA_IRQ_1, frame_received_handler);
     irq_set_enabled(DMA_IRQ_1, true);
-
-    // Set up an RX interrupt
-    int UART_IRQ = UART_IRQ_NUM(UART_ID);
 
     // This will find a free pio and state machine for our program and load it for us
     // We use pio_claim_free_sm_and_add_program_for_gpio_range (for_gpio_range variant)

@@ -2,6 +2,7 @@ import serial
 import numpy as np
 import time
 from bdfparser import Font
+from datetime import datetime
 
 
 # Must match parameters of the pico firmware!
@@ -87,30 +88,60 @@ def example_static_frame():
     time.sleep(ser.timeout)
 
 
+def get_char_data(font, char):
+    char_data = font.glyph(char).draw().todata()
+    # Convert to actually numbers (from strings)
+    # Must do some slicing to invert bit order
+    char_data = [np.uint8(int(char[::-1], 2)) for char in char_data]
+    return char_data
+
+
 def example_static_text():
     # Load bitmap font
     font = Font("./fonts/ibmfonts/bdf/ib8x8u.bdf")
 
     # Text to display
-    text = "hello  "
+    text = "hello "
 
     ser = setup_serial()
 
     frame = get_empty_frame_buffer()
 
     for i in range(N_DISPLAY_MODULES):
-        char_data = font.glyph(text[i % len(text)]).draw().todata()
-        # Convert to actually numbers (from strings)
-        char_data = [np.uint8(int(char, 2)) for char in char_data]
+        char_data = get_char_data(font, text[i % len(text)])
         frame_buffer_insert_single(frame, char_data, i, False, True)
 
-    print(np.vectorize(np.binary_repr)(frame, width=16))
+    # print(np.vectorize(np.binary_repr)(frame, width=16))
 
     # Transmit the frame
     transmit_frame(ser, frame)
     # Apparenty not wating for a little here causes inclomplete transmission even when I set no timeout for the serial.
     # Write should be blocking, so not sure what is the problem here.
     time.sleep(ser.timeout)
+
+
+def example_time():
+    # Load bitmap font
+    font = Font("./fonts/ibmfonts/bdf/ib8x8u.bdf")
+
+    ser = setup_serial()
+
+    frame = get_empty_frame_buffer()
+
+    while True:
+        # text = datetime.now().strftime("%H:%M:%S ")
+        text = datetime.now().strftime(" %S ")
+
+        for i in range(N_DISPLAY_MODULES):
+            char_data = get_char_data(font, text[i % len(text)])
+            frame_buffer_insert_single(frame, char_data, i, False, True)
+
+        # print(np.vectorize(np.binary_repr)(frame, width=16))
+
+        # Transmit the frame
+        transmit_frame(ser, frame)
+        time.sleep(1)
+
 
 
 if __name__ == "__main__":

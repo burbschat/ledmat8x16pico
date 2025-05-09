@@ -185,11 +185,10 @@ void __not_in_flash_func(row_done_handler)() {
     irq_clear(PIO0_IRQ_0);
 }
 
-//void __not_in_flash_func(frame_received_handler)() {
-void frame_received_handler() {
+void __not_in_flash_func(frame_received_handler)() {
     // Latch rx buffer to actual frame buffer
-    for (int row = 0;row < N_ROWS;row++) {
-        for (int col = 0;col < N_DISPLAY_MODULES;col++) {
+    for (int row = 0; row < N_ROWS; row++) {
+        for (int col = 0; col < N_DISPLAY_MODULES; col++) {
             frame_buffer[row][col + 1] = frame_buffer_uart_rx[row][col];
         }
     }

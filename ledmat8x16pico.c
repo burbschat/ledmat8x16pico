@@ -23,24 +23,44 @@
 // it seems. Not an elegant solution, but it works for now...
 #define TLC59283_TX_FREQ 1000000
 
+// Consider 16 for data bits as this corresponds to exactly the module width
+#define UART_BAUD_RATE 115200
+#define UART_DATA_BITS 8
+#define UART_PARITY UART_PARITY_NONE
+#define UART_STOP_BITS 1
+
 #define PIN_LED 25
+
+#define UART_ID uart0
+// We are using pins 0 and 1, but see the GPIO function select table in the
+// datasheet for information on which other pins can be used.
+#define UART_TX_PIN 0
+#define UART_RX_PIN 1
+
 
 //                                     left most module    right most module
 //              <-- shift direction    left       right    left       right     <-- shift direction
 uint16_t test_pattern[2] = {0b1010101010101010, 0b1101000000000111};
+// uint16_t test_pattern[2] = {0b1111111111111111, 0b1111111111111111};
 
 /*uint16_t test_frame[N_ROWS][N_DISPLAY_MODULES] = {*/
 /*    0xc6c6e6f6decec600,*/
 /*};*/
 
-uint16_t frame_buffer[N_ROWS][N_DISPLAY_MODULES + 1];
+// Frame buffer currently displayed
+volatile uint16_t frame_buffer[N_ROWS][N_DISPLAY_MODULES + 1];
+// Frame buffer to be filled via UART, then latched into the actual frame buffer.
+// This should be stored in memory aligned such that rows are just appended in one large continuous
+// region of memory.
+volatile uint16_t frame_buffer_uart_rx[N_ROWS][N_DISPLAY_MODULES];
 
 // Prepare variables to hold references to used PIO, state-machine and PIO
 // program offset
 PIO pio = pio0;
 uint sm_tx = 0;
 
-int dma_chan;
+int piodma_chan;
+int uartdma_chan;
 
 void frame_buffer_insert_hex(uint64_t hex, int n_module, bool r, bool g) {
     for (int row = 0; row < N_ROWS; row++) {
@@ -158,11 +178,24 @@ void __not_in_flash_func(row_done_handler)() {
     //dma_hw->ints0 = 1u << dma_chan;
 
     // Dispatch DMA with the next data
-    dma_channel_set_read_addr(dma_chan, frame_buffer[current_row], true);
+    dma_channel_set_read_addr(piodma_chan, frame_buffer[current_row], true);
 
     // Clear PIO interrupt (and NVIC)
     pio_interrupt_clear(pio, 0);
     irq_clear(PIO0_IRQ_0);
+}
+
+//void __not_in_flash_func(frame_received_handler)() {
+void frame_received_handler() {
+    // Latch rx buffer to actual frame buffer
+    for (int row = 0;row < N_ROWS;row++) {
+        for (int col = 0;col < N_DISPLAY_MODULES;col++) {
+            frame_buffer[row][col + 1] = frame_buffer_uart_rx[row][col];
+        }
+    }
+    // Clear the interrupt
+    dma_hw->ints0 = 1u << uartdma_chan;
+    dma_channel_set_write_addr(uartdma_chan, frame_buffer_uart_rx, true);
 }
 
 int main() {
@@ -189,15 +222,16 @@ int main() {
     init_frame_buffer();
 
     // Setup DMA
-    dma_chan = dma_claim_unused_channel(true);
-    dma_channel_config c = dma_channel_get_default_config(dma_chan);
-    channel_config_set_transfer_data_size(&c, DMA_SIZE_16); // One module has 16 columns
-    channel_config_set_read_increment(&c, true); // Increment read address after each written block
+    piodma_chan = dma_claim_unused_channel(true);
+    dma_channel_config piodma_conf = dma_channel_get_default_config(piodma_chan);
+    channel_config_set_transfer_data_size(&piodma_conf, DMA_SIZE_16); // One module has 16 columns
+    channel_config_set_read_increment(&piodma_conf, true); // Increment read address after each written block
+    channel_config_set_write_increment(&piodma_conf, false); // Increment read address after each written block
     // Use data request signal from PIO0 TX FIFO (must be matched to used pio!)
-    channel_config_set_dreq(&c, DREQ_PIO0_TX0);
+    channel_config_set_dreq(&piodma_conf, DREQ_PIO0_TX0);
 
     dma_channel_configure(
-        dma_chan, &c,
+        piodma_chan, &piodma_conf,
         &pio0_hw->txf[0],  // Write address (only need to set this once)
         NULL,              // Don't provide a read address yet
         N_DISPLAY_MODULES + 1, // Write the same value many times, then halt and interrupt
@@ -210,6 +244,39 @@ int main() {
     // Configure the processor to run dma_handler() when DMA IRQ 0 is asserted
     // irq_set_exclusive_handler(DMA_IRQ_0, dma_done);
     // irq_set_enabled(DMA_IRQ_0, true);
+    
+    // Setup UART for receiving frame data
+    // Set up our UART with a basic baud rate.
+    uart_init(UART_ID, UART_BAUD_RATE);
+    // Set the TX and RX pins by using the function select on the GPIO
+    // Set datasheet for more information on function select
+    gpio_set_function(UART_TX_PIN, UART_FUNCSEL_NUM(UART_ID, UART_TX_PIN));
+    gpio_set_function(UART_RX_PIN, UART_FUNCSEL_NUM(UART_ID, UART_RX_PIN));
+    // Set our data format
+    uart_set_format(UART_ID, UART_DATA_BITS, UART_STOP_BITS, UART_PARITY);
+
+    // Setup DMA for use with UART
+    uartdma_chan = dma_claim_unused_channel(true);
+    dma_channel_config uartdma_conf = dma_channel_get_default_config(uartdma_chan);
+    // One module has 16 columns but uart characters are 8 bit, so transfer in 8 bit chunks
+    channel_config_set_transfer_data_size(&uartdma_conf, DMA_SIZE_8);
+    channel_config_set_read_increment(&uartdma_conf, false); // False is default?
+    channel_config_set_write_increment(&uartdma_conf, true);
+    // Consider use of ring buffer?
+    // Get data from UART RX
+    channel_config_set_dreq(&uartdma_conf, UART_DREQ_NUM(UART_ID, false));
+
+    dma_channel_configure(
+        uartdma_chan, &uartdma_conf,
+        frame_buffer_uart_rx, // Dont provide a write address yet
+        &((uart_hw_t *)UART_ID)->dr, // Read address
+        N_DISPLAY_MODULES * 2 * N_ROWS, // Receive one full frame at a time in 8 bit chunks
+        true // Immediately start
+    );
+    // Enable interrupt via IRQ1 (IRQ0 used for PIO interrupt)
+    dma_channel_set_irq1_enabled(uartdma_chan, true);
+    irq_set_exclusive_handler(DMA_IRQ_1, frame_received_handler);
+    irq_set_enabled(DMA_IRQ_1, true);
 
     // This will find a free pio and state machine for our program and load it for us
     // We use pio_claim_free_sm_and_add_program_for_gpio_range (for_gpio_range variant)

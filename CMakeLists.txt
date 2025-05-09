@@ -19,9 +19,9 @@ target_sources(ledmat8x16pico PRIVATE ledmat8x16pico.c)
 pico_generate_pio_header(ledmat8x16pico ${CMAKE_CURRENT_LIST_DIR}/tlc59283.pio)
 
 
-# Enabel stdio output via USB and UART
-pico_enable_stdio_usb(ledmat8x16pico 1)
-pico_enable_stdio_uart(ledmat8x16pico 1)
+# Enable stdio output via USB and UART
+#pico_enable_stdio_usb(ledmat8x16pico 1)
+#pico_enable_stdio_uart(ledmat8x16pico 1)
 
 # Enable extra outputs
 pico_add_extra_outputs(ledmat8x16pico)

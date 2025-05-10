@@ -3,7 +3,6 @@
 #include "hardware/pio.h"
 #include "pico/stdlib.h"
 #include "tlc59283.pio.h"
-#include <stdio.h>
 #include <string.h>
 
 // Pins for tlc59283 serial link.

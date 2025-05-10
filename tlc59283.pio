@@ -4,12 +4,9 @@
 .side_set 1
 ; Side 0 is CLK
 
-.define public T_SETUP 4
 .define public T_CLK_RISE_DELAY 4
 .define public T_CLK_HIGH 4
 
-; Assert clock low and wait a little
-    nop             side 0 [T_SETUP - 1]
 .wrap_target
 preset_counter:
     irq wait 0      side 0

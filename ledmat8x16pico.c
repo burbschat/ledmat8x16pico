@@ -362,8 +362,6 @@ int main() {
     // Initialize UART for receiving frames
     init_uart_frame_receive();
 
-    sleep_ms(10); // TODO: Do we really need this?
-
     // Setup timer for frame modification callback (do something like rotate the frame buffer)
     struct repeating_timer timer;
     add_repeating_timer_ms(50, modify_frame_callback, NULL, &timer);

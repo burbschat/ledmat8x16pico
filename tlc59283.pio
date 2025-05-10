@@ -51,12 +51,11 @@ static inline void tlc59283_tx_program_init(PIO pio, uint sm, uint offset, uint 
     sm_config_set_out_pins(&c, pin_data, 1);
     // Set the clock pin as a sideset pin
     sm_config_set_sideset_pins(&c, pin_clk);
-    // Set false for shift to left, true for autopull enable, 32 for autopull
-    // threshold (16 bits per tile and row, but may shift two at a time not not
-    // waste buffer spaces)
+    // Set false for shift to left, true for autopull enable, 16 for autopull
+    // threshold (16 bits per tile and row so pull one row at a time)
     sm_config_set_out_shift(&c, false, true, 16);
 
-    // Join FIFOs to get larger length as we won't need the RX FIFO.
+    // Join FIFOs to get larger length as we won't need the RX FIFO anyways.
     // TX FIFO length=8 is used for transmit, RX FIFO is disabled.
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
 
@@ -65,9 +64,10 @@ static inline void tlc59283_tx_program_init(PIO pio, uint sm, uint offset, uint 
     float div = clock_get_hz(clk_sys) / (freq * cycles_per_bit);
     sm_config_set_clkdiv(&c, div);
 
-    // Load configuration into state machine and set program counter the start
-    // address (offset)
+    // Load configuration into state machine and set program counter to the
+    // start address (the offset where the program is loaded)
     pio_sm_init(pio, sm, offset, &c);
+
     // Start the state machine
     pio_sm_set_enabled(pio, sm, true);
 }

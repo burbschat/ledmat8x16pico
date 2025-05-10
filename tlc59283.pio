@@ -1,30 +1,33 @@
 .pio_version 0
 
 .program tlc59283_tx
-.side_set 1
-; Side 0 is CLK
+.side_set 1 ; Side 0 is CLK
 
 .define public T_CLK_RISE_DELAY 4
 .define public T_CLK_HIGH 4
 
 .wrap_target
 preset_counter:
+    ; Assert IRQ and wait until cleared. The handler called on the CPU must
+    ; initialize DMA to provide data for transmission (including the length 
+    ; header) prior to clearing the IRQ flag/interrupt.
     irq wait 0      side 0
+    ; The first 16 bits of the data convey the length of the following data to
+    ; which is to be transmitted
     out x, 16       side 0
 tx_loop:
     ; This is a serial protocol, so shift one bit from output FIFO to DATA pin
     ; We place the data bit change in the middle here, just for simplicity. It
     ; can be much closer to the clock edge, which it ends up being if one
-    ; cascades mutliple tlc59283, which however works fine. As long as the
+    ; cascades multiple tlc59283, which however works fine. As long as the
     ; clock signal travels faster than the data, which experiences (very short
     ; but sufficient) delays when traversing a tlc59283, the clock always rises
     ; before the tlc59283 shift register advances. Techincally if we have so
     ; many modules that the skew introduced by all the modules exceeds a clock
     ; period, the transmission will fail. This however should never occur in
     ; practice.
-    out pins, 1      side 0 [T_CLK_RISE_DELAY - 1] ; Shift one bit while keeping clock low
-    nop              side 1 [T_CLK_HIGH - 1] ; Pulse clock high
-    jmp x--, tx_loop side 0
+    out pins, 1      side 0 [T_CLK_RISE_DELAY - 1] ; Shift out one bit, clock low
+    jmp x--, tx_loop side 1 [T_CLK_HIGH - 1]       ; Jump if done, clock high
 .wrap
 
 % c-sdk {

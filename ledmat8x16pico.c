@@ -63,6 +63,10 @@ volatile uint16_t frame_buffer[N_ROWS][N_DISPLAY_MODULES + 1];
 // continous region (rows appended to each other).
 volatile uint16_t frame_buffer_uart_rx[N_ROWS][N_DISPLAY_MODULES];
 
+// Keep track of the last row pulsed an next one for which data should be transmitted.
+volatile uint8_t current_row = N_ROWS - 1;
+volatile uint8_t next_row = 0;
+
 // Prepare variables to hold references to used PIO, state-machine and PIO
 // program offset. Use a variable instead of a macro as technically one can decide which PIO and sm
 // to use at runtime (which I might do at some point).
@@ -188,9 +192,6 @@ void __not_in_flash_func(row_done_handler)() {
 
     static bool first_run = true;
 
-    static uint8_t current_row = 0;
-    static uint8_t prev_row = N_ROWS - 1;
-
     if (first_run) {
         first_run = false;
     } else {
@@ -199,10 +200,10 @@ void __not_in_flash_func(row_done_handler)() {
         gpio_put(PIN_LATCH, 1);
         gpio_put(PIN_LATCH, 0);
 
-        // Turn off previous row
-        gpio_put(PIN_ROWS_BASE + prev_row, 1);
-        // Turn on current row
-        gpio_put(PIN_ROWS_BASE + current_row, 0);
+        // Turn off current row
+        gpio_put(PIN_ROWS_BASE + current_row, 1);
+        // Turn on next row
+        gpio_put(PIN_ROWS_BASE + next_row, 0);
         gpio_put(PIN_BLANK, 0); // Un-blank the display
 
         // Wait a little to set how long each row is displayed.
@@ -214,21 +215,12 @@ void __not_in_flash_func(row_done_handler)() {
         // quiet. Have to try with some different load (e.g. resistors).
         busy_wait_ms(1);
 
-        // Increase row counters
-        prev_row = current_row;
-        current_row++;
-
-        if (prev_row >= N_ROWS) {
-            prev_row = 0;
-        }
-
-        if (current_row >= N_ROWS) {
-            current_row = 0;
-        }
+        // Make the current row the previously next and set new next row
+        current_row = next_row;
+        next_row = (current_row + 1) % 8;
     }
-
     // Dispatch DMA with the next data
-    dma_channel_set_read_addr(piodma_chan, frame_buffer[current_row], true);
+    dma_channel_set_read_addr(piodma_chan, frame_buffer[next_row], true);
 
     // Clear PIO interrupt (and NVIC)
     // Apparently one must clear both in exactly this order.

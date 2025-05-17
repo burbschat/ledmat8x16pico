@@ -20,6 +20,9 @@
 #define N_ROWS 8
 #define PIN_ROWS_BASE 6 // Use N_ROWs row strobe pins starting at this pin
 
+// Time each row will be illuminated
+#define ROW_ILLUMINATE_MS 1
+
 // Number of display modules for which data should be transmitted. It is possible to have less
 // modules connected than this number. In this case the data is simply shifted past the last module
 // (which ofc means that more data is transmitted for every row than strictly required).
@@ -183,6 +186,14 @@ bool modify_frame_callback(__unused struct repeating_timer *t) {
     return true;
 }
 
+bool clear_row_done_interrupt(__unused struct repeating_timer *t) {
+    // Dispatch DMA with the next data.
+    // The state machine will stay stalled until this call as the input fifo should be empty.
+    dma_channel_set_read_addr(piodma_chan, frame_buffer[next_row], true);
+    // Return false to remove the timer that called this callback (i.e. operate as a one-shot timer)
+    return false;
+}
+
 /**
  * @brief Handler called after each row transmission
  */
@@ -191,6 +202,8 @@ void __not_in_flash_func(row_done_handler)() {
     // TODO: This function need some rework
 
     static bool first_run = true;
+
+    static struct repeating_timer row_illuminated_timer;
 
     if (first_run) {
         first_run = false;
@@ -206,26 +219,29 @@ void __not_in_flash_func(row_done_handler)() {
         gpio_put(PIN_ROWS_BASE + next_row, 0);
         gpio_put(PIN_BLANK, 0); // Un-blank the display
 
-        // Wait a little to set how long each row is displayed.
-        // Must use busy_wait_ms (sleep_ms cannot be used in interrupt handler)
-        // Pulsing rows too fast seems to result in very annoying audible noise from the LED module.
-        // 5 ms per row seems to mitigate this to a tolerable level (lower frequency).
-        // Not exactly sure if this is caused by the LEDs or the MOSFETs driving the rows.
-        // Disconnecting LEDs causes the noise to vanish, but a MOSFET without load may as well be
-        // quiet. Have to try with some different load (e.g. resistors).
-        busy_wait_ms(1);
-
         // Make the current row the previously next and set new next row
         current_row = next_row;
         next_row = (current_row + 1) % 8;
     }
-    // Dispatch DMA with the next data
-    dma_channel_set_read_addr(piodma_chan, frame_buffer[next_row], true);
 
-    // Clear PIO interrupt (and NVIC)
-    // Apparently one must clear both in exactly this order.
+    // Clear PIO interrupt (and NVIC).
+    // Apparently one must clear both in exactly this order as the pio interrupt set seems to cause
+    // the NVIC interrupt to also be asserted.
+    // Interrupts are reset but PIO will stay stalled until dma feeds in data!
     pio_interrupt_clear(pio, 0);
     irq_clear(PIO0_IRQ_0);
+
+    // Set a timer and call a callback that dispatches the dma once the timer expires.
+    // This way we can make sure to wait more or less the time we want the row to be illuminated
+    // without blocking the whole core. Have clear_row_done_interrupt() return false, which will
+    // cause the timer to be removed on return of the callback.
+    // The interrupt flags must be cleared before returning from this function as if not cleared
+    // this handler is just immediately called again. Thus we cannot have the PIO SM wait for the
+    // IRQ flag to be cleared. Instead we utilize that the SM will stay stalled at the out
+    // instruction until there is some data in the RX fifo (provided via DMA). The DMA then is
+    // dispatched by the callback called by the timer.
+    add_repeating_timer_ms(ROW_ILLUMINATE_MS, clear_row_done_interrupt, NULL,
+                           &row_illuminated_timer);
 }
 
 /**

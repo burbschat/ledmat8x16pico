@@ -8,10 +8,14 @@
 
 .wrap_target
 preset_counter:
-    ; Assert IRQ and wait until cleared. The handler called on the CPU must
-    ; initialize DMA to provide data for transmission (including the length 
-    ; header) prior to clearing the IRQ flag/interrupt.
-    irq wait 0      side 0
+    ; Assert IRQ to signal completion of a row.
+    ; IRQ is reset by handler on CPU side. The handler called on the CPU must
+    ; initialize DMA to provide data for transmission (including the length
+    ; header). The SM will stay stalled at the 'out' instruction until DMA is
+    ; dispatched and provides data to the RX fifo. The time the SM is stalled
+    ; is controlled by a timer set to the row illumination duration which calls
+    ; a function dispatching DMA once expired.
+    irq set 0       side 0
     ; The first 16 bits of the data convey the length of the following data to
     ; which is to be transmitted
     out x, 16       side 0

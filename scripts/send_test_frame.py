@@ -3,6 +3,7 @@ import numpy as np
 import time
 from bdfparser import Font
 from datetime import datetime
+from skimage import io
 
 
 # Must match parameters of the pico firmware!
@@ -10,6 +11,10 @@ N_DISPLAY_MODULES = 7
 N_ROWS = 8
 
 def interleave_uint8(x, y):
+    # Cast just in case
+    x = np.uint8(x)
+    y = np.uint8(y)
+
     # Interleave bits
     # Shamelessly stolen from http://graphics.stanford.edu/~seander/bithacks.html#Interleave64bitOps
     # Ignore numpy overflow warnings as they always occur as a product of the following operation
@@ -37,7 +42,7 @@ def frame_buffer_insert_hex(frame, hex: np.uint64, n_module: int, r: bool, g: bo
         frame[row][n_module] = interleave_uint8(x, y)
 
 
-def frame_buffer_insert_single(frame, frame_single, n_module: int, r: bool, g: bool):
+def frame_buffer_insert_single(frame, frame_single, n_module: int, r: bool, g: bool, op=None):
     # Insert non-interlaced frame (single color) into the frame buffer
     for row in range(N_ROWS):
         x = np.uint8(0)
@@ -46,7 +51,17 @@ def frame_buffer_insert_single(frame, frame_single, n_module: int, r: bool, g: b
             x = frame_single[row]
         if r:
             y = frame_single[row]
-        frame[row][n_module] = interleave_uint8(x, y)
+        if op is None:
+            # Overwrite with the new values
+            frame[row][n_module] = interleave_uint8(x, y)
+        elif op == "and":
+            # Take and between new and present values
+            frame[row][n_module] &= interleave_uint8(x, y)
+        elif op == "or":
+            # Take or between new and present values
+            frame[row][n_module] |= interleave_uint8(x, y)
+        else:
+            raise ValueError("Operation must be 'and' or 'or' or None.")
 
 
 def transmit_frame(ser, frame):
@@ -142,6 +157,35 @@ def example_time():
         transmit_frame(ser, frame)
         time.sleep(1)
 
+def example_image():
+    # Setup UART serial
+    ser = setup_serial()
+
+    # Tiny 8x8 image
+    image = io.imread("./example_image.png")
+
+    # Some threshold above which a pixel is considered active
+    threshold = 255 / 2
+    # For some reason there may be color values where there is transparency.
+    # To fix this take the and between transparency region and color regions.
+    alpha_pos = (image[:, :, 3] > threshold)
+    red_pos = (image[:, :, 0] > threshold) & alpha_pos
+    grn_pos = (image[:, :, 1] > threshold) & alpha_pos
+
+    # Convert to 8 bit integers
+    red_pos = np.packbits(red_pos)
+    grn_pos = np.packbits(grn_pos)
+
+    # Insert the image into the frame buffer
+    frame = get_empty_frame_buffer()
+
+    for i in range(N_DISPLAY_MODULES):
+        frame_buffer_insert_single(frame, red_pos, i, True, False)
+        frame_buffer_insert_single(frame, grn_pos, i, False, True, op="or")
+
+    # Transmit the frame
+    transmit_frame(ser, frame)
+    time.sleep(ser.timeout)
 
 
 if __name__ == "__main__":

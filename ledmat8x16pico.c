@@ -21,7 +21,7 @@
 #define PIN_ROWS_BASE 6 // Use N_ROWs row strobe pins starting at this pin
 
 // Time each row will be illuminated
-#define ROW_ILLUMINATE_MS 1
+#define ROW_ILLUMINATE_US 1000
 
 // Number of display modules for which data should be transmitted. It is possible to have less
 // modules connected than this number. In this case the data is simply shifted past the last module
@@ -242,7 +242,7 @@ void __not_in_flash_func(row_done_handler)() {
     // IRQ flag to be cleared. Instead we utilize that the SM will stay stalled at the out
     // instruction until there is some data in the RX fifo (provided via DMA). The DMA then is
     // dispatched by the callback called by the timer.
-    add_repeating_timer_ms(ROW_ILLUMINATE_MS, clear_row_done_interrupt, NULL,
+    add_repeating_timer_us(ROW_ILLUMINATE_US, clear_row_done_interrupt, NULL,
                            &row_illuminated_timer);
 }
 

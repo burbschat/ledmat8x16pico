@@ -30,8 +30,10 @@
 
 // Bit rate for tlc59283 serial link.
 // We transmit one bit per clock so this is equivalent to the serial links clock frequency.
-// Seems like 10MHz is around the limit for decently shaped pulses with my hardware.
-#define TLC59283_TX_FREQ 1000000
+// Was able to drive my modules at the advertised frequency of 35MHz for the tlc59283. This would
+// work even with 40cm extension wires between modules on the first prototype which has some clock
+// coupling into neighboring lines.
+#define TLC59283_TX_FREQ 35000000
 
 // Frame receive UART parameters.
 // Could use 16 data bits as this corresponds to exactly the module width. Two transmissions is also

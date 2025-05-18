@@ -3,8 +3,10 @@
 .program tlc59283_tx
 .side_set 1 ; Side 0 is CLK
 
-.define public T_CLK_RISE_DELAY 4
-.define public T_CLK_HIGH 4
+; Actually if delays are too large we cannot achieve higher baud rates as we
+; need multiple PIO clocks per bit. Technically could remove them altogether. 
+.define public T_CLK_RISE_DELAY 1
+.define public T_CLK_HIGH 1
 
 .wrap_target
 preset_counter:

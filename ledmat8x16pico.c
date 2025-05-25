@@ -1,72 +1,37 @@
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
+#include "parameters.h"
 #include "pico/stdlib.h"
 #include "tlc59283.pio.h"
+#include "util.h"
 #include <string.h>
 
-// Pins for tlc59283 serial link.
-// Both pins must be on the same GPIO group (0->31 or 16->47) as "No single PIO
-// instance can interact with both pins 0->15 or 32->47 at the same time." for
-// the rp2350.
-#define PIN_CLK 2
-#define PIN_DATA 3
-
-// Pins for other tlc59283 controls (latch, blank)
-#define PIN_LATCH 4
-#define PIN_BLANK 5
-
-// Row strobe pins
-#define N_ROWS 8
-#define PIN_ROWS_BASE 6 // Use N_ROWs row strobe pins starting at this pin
-
-// Time each row will be illuminated
-#define ROW_ILLUMINATE_US 1000
-
-// Number of display modules for which data should be transmitted. It is possible to have less
-// modules connected than this number. In this case the data is simply shifted past the last module
-// (which ofc means that more data is transmitted for every row than strictly required).
-#define N_DISPLAY_MODULES 7
-
-// Bit rate for tlc59283 serial link.
-// We transmit one bit per clock so this is equivalent to the serial links clock frequency.
-// Was able to drive my modules at the advertised frequency of 35MHz for the tlc59283. This would
-// work even with 40cm extension wires between modules on the first prototype which has some clock
-// coupling into neighboring lines.
-#define TLC59283_TX_FREQ 35000000
-
-// Frame receive UART parameters.
-// Could use 16 data bits as this corresponds to exactly the module width. Two transmissions is also
-// fine. Keep 8 for now as this seems to be a more standard setting. Possibly required to adjust DMA
-// settings if number of data bits is changed.
-#define UART_ID uart0
-#define UART_TX_PIN 0
-#define UART_RX_PIN 1
-#define UART_BAUD_RATE 115200
-#define UART_DATA_BITS 8
-#define UART_PARITY UART_PARITY_NONE
-#define UART_STOP_BITS 1
-
-// LED Pin on the Pico board.
-// Can be flashed to perhaps indicate state machine status or similar.
-#define PIN_LED 25
-
-// Some test patterns which may be used for development/tests.
-// Bits are shifted right to left as indicated below.
+// Some test patterns which may be used for development/tests and also illustrates how the data is
+// arranged). Bits are shifted right to left as indicated below.
 //                            left most module    right most module <-> Pico
 //      <-- shift direction   left       right    left       right   <-- shift direction
 uint16_t test_pattern[2] = {0b1010101010101010, 0b1101000000000111};
 
-// Frame buffer containing currently displayed frame and row length data.
-// Row length data is stored in the first column and used by the PIO program to determine the number
-// of bits to transmit. As we use 16 bit integers here, technically this limits the firmware to a
-// maximum of 4096 chained modules (i.e. probably more than you will ever need to use).
-volatile uint16_t frame_buffer[N_ROWS][N_DISPLAY_MODULES + 1];
+// Frame buffer containing some frames so we don't have to UART transmit on every refresh (too slow
+// for larger displays).
+// The actually displayed frame will be latched to a different buffer by some reoccurring handler
+// (timer based or perhaps initiated by a special UART message).
+volatile framebuffer_t frame_buffer;
+// Variable to store the currently displayed frame
+// This includes a 16 bit header to let the state machine know the length of each row. We cannot
+// hard-code the row length in the state machine code as there the largest number one can assign to
+// a register is 31. The way around this is to read the number from the RX fifo, which is what we do
+// here. These header values are not touched once the frame buffer has been initialized.
+// As we use 16 bit integers here, technically this limits the firmware to a maximum of 4096 chained
+// modules (i.e. probably more than you will ever need to use).
+volatile h_frame_t current_frame_buffer;
 
 // Frame buffer to be filled via UART, then latched into the actual frame buffer.
 // Received frame data is written to this memory region via DMA, thus assuming that we have one
-// continous region (rows appended to each other).
-volatile uint16_t frame_buffer_uart_rx[N_ROWS][N_DISPLAY_MODULES];
+// continous region (rows appended to each other). This does not include a 16 bit row length
+// header.
+volatile frame_t frame_buffer_uart_rx;
 
 // Keep track of the last row pulsed an next one for which data should be transmitted.
 volatile uint8_t current_row = N_ROWS - 1;
@@ -78,37 +43,28 @@ volatile uint8_t next_row = 0;
 PIO pio = pio0;
 uint sm_tx = 0;
 
-// Cariables to hold references to used DMA channels
+// Variables to hold references to used DMA channels
 int piodma_chan;
 int uartdma_chan;
 
-/**
- * @brief Interleave two 8 bit integers
- *
- * @param x Used for odd position
- * @param y Used for even positions
- * @return Interleaved bits of x and y as 16 bit integer
- */
-uint16_t interleave_bits(uint8_t x, uint8_t y) {
-    uint16_t z;
-    // Shamelessly stolen from
-    // http://graphics.stanford.edu/~seander/bithacks.html#Interleave64bitOps
-    z = ((x * 0x0101010101010101ULL & 0x8040201008040201ULL) * 0x0102040810204081ULL >> 49) &
-            0x5555 |
-        ((y * 0x0101010101010101ULL & 0x8040201008040201ULL) * 0x0102040810204081ULL >> 48) &
-            0xAAAA;
-    return z;
+void set_row_length(uint16_t length) {
+    // Set the row length entries in the current frame buffer
+    for (int row = 0; row < N_ROWS; row++) {
+        // First column contains the counter preset values, which are the row length - 1
+        current_frame_buffer[row][0] = length - 1;
+    }
 }
 
 /**
- * @brief Insert 64 bit integer representation of module frame into currently displayed frame buffer
+ * @brief Insert 64 bit integer representation of module frame into a frame
  *
+ * @param frame Pointer to frame in the frame buffer (including row headers)
  * @param hex 64 bit representation of the module frame
  * @param n_module Module position in the frame buffer
  * @param r If true, red LEDs will be illuminated
  * @param g If true, green LEDs will be illuminated
  */
-void frame_buffer_insert_hex(uint64_t hex, int n_module, bool r, bool g) {
+void frame_insert_modulewise(uint64_t hex, int n_module, bool r, bool g) {
     // May be used with output from this: https://xantorohara.github.io/led-matrix-editor/
     for (int row = 0; row < N_ROWS; row++) {
         uint8_t x = 0;
@@ -120,15 +76,7 @@ void frame_buffer_insert_hex(uint64_t hex, int n_module, bool r, bool g) {
             y = *((uint8_t *)&hex + row);
         }
 
-        frame_buffer[row][n_module + 1] = interleave_bits(x, y);
-    }
-}
-
-void set_row_length(uint16_t length) {
-    // Set the row length entries in the frame buffer (all the same value)
-    for (int row = 0; row < N_ROWS; row++) {
-        // First column actually contains the counter preset values, which are the row length - 1
-        frame_buffer[row][0] = length - 1;
+        current_frame_buffer[row][n_module + 1] = interleave_bits(x, y);
     }
 }
 
@@ -143,13 +91,13 @@ void display_default_frame() {
         // }
 
         // Display some letters (hard coded using 64 bit representation)
-        frame_buffer_insert_hex(0xc6c6e6f6decec600, 0, 1, 0);
-        frame_buffer_insert_hex(0x6666667e66663c00, 1, 1, 1);
-        frame_buffer_insert_hex(0x3c66760606663c00, 2, 0, 1);
-        frame_buffer_insert_hex(0x3c66666666663c00, 3, 1, 1);
-        frame_buffer_insert_hex(0x1818183c66666600, 4, 1, 0);
-        frame_buffer_insert_hex(0x6666667e66663c00, 5, 1, 1);
-        frame_buffer_insert_hex(0x0, 6, 0, 1);
+        frame_insert_modulewise(0xc6c6e6f6decec600, 0, 1, 0);
+        frame_insert_modulewise(0x6666667e66663c00, 1, 1, 1);
+        frame_insert_modulewise(0x3c66760606663c00, 2, 0, 1);
+        // frame_buffer_insert_hex(0x3c66666666663c00, 3, 1, 1);
+        // frame_buffer_insert_hex(0x1818183c66666600, 4, 1, 0);
+        // frame_buffer_insert_hex(0x6666667e66663c00, 5, 1, 1);
+        // frame_buffer_insert_hex(0x0, 6, 0, 1);
     }
 }
 
@@ -169,15 +117,18 @@ void init_frame_buffer() {
  * @param n Number of positions to rotate
  */
 void rotate_frame_buffer(int n) {
+    // For now just rotate the currently displayed frame.
+    // Later implement this as a constant offset applied when reading a frame from the frame buffer
+    // to the currently displayed frame buffer.
     for (int row = 0; row < N_ROWS; row++) {
         // Left most bits of left most module moved to right side of module
-        uint16_t carry = frame_buffer[row][0 + 1] << (16 - n);
+        uint16_t carry = current_frame_buffer[row][0 + 1] << (16 - n);
         uint16_t next_carry;
         for (int module = N_DISPLAY_MODULES - 1; module >= 0;
              module--) { // Start with right most module
             // Left most bit of current module (to be shifted out) moved to right side of module
-            next_carry = frame_buffer[row][module + 1] << (16 - n);
-            frame_buffer[row][module + 1] = (frame_buffer[row][module + 1] >> n) | carry;
+            next_carry = current_frame_buffer[row][module + 1] << (16 - n);
+            current_frame_buffer[row][module + 1] = (current_frame_buffer[row][module + 1] >> n) | carry;
             carry = next_carry; // Update carry for next module to the shifted out bit
         }
     }
@@ -191,7 +142,7 @@ bool modify_frame_callback(__unused struct repeating_timer *t) {
 bool clear_row_done_interrupt(__unused struct repeating_timer *t) {
     // Dispatch DMA with the next data.
     // The state machine will stay stalled until this call as the input fifo should be empty.
-    dma_channel_set_read_addr(piodma_chan, frame_buffer[next_row], true);
+    dma_channel_set_read_addr(piodma_chan, current_frame_buffer[next_row], true);
     // Return false to remove the timer that called this callback (i.e. operate as a one-shot timer)
     return false;
 }
@@ -253,7 +204,7 @@ void __not_in_flash_func(frame_received_handler)() {
     // Latch rx buffer to actual frame buffer
     for (int row = 0; row < N_ROWS; row++) {
         for (int col = 0; col < N_DISPLAY_MODULES; col++) {
-            frame_buffer[row][col + 1] = frame_buffer_uart_rx[row][col];
+            current_frame_buffer[row][col + 1] = frame_buffer_uart_rx[row][col];
         }
     }
     // Clear the interrupt

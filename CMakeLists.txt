@@ -13,7 +13,7 @@ pico_sdk_init()
 add_executable(ledmat8x16pico)
 
 # Add sources to executable
-target_sources(ledmat8x16pico PRIVATE ledmat8x16pico.c)
+target_sources(ledmat8x16pico PRIVATE ledmat8x16pico.c parameters.h util.h util.c)
 
 # Generate header from pio assembly file
 pico_generate_pio_header(ledmat8x16pico ${CMAKE_CURRENT_LIST_DIR}/tlc59283.pio)

@@ -26,6 +26,8 @@ volatile framebuffer_t frame_buffer;
 // As we use 16 bit integers here, technically this limits the firmware to a maximum of 4096 chained
 // modules (i.e. probably more than you will ever need to use).
 volatile h_frame_t current_frame_buffer;
+volatile uint32_t current_frame_number;
+volatile uint32_t current_frame_offset;
 
 // Frame buffer to be filled via UART, then latched into the actual frame buffer.
 // Received frame data is written to this memory region via DMA, thus assuming that we have one
@@ -64,7 +66,7 @@ void set_row_length(uint16_t length) {
  * @param r If true, red LEDs will be illuminated
  * @param g If true, green LEDs will be illuminated
  */
-void frame_insert_modulewise(uint64_t hex, int n_module, bool r, bool g) {
+void frame_insert_modulewise(int frame_number, uint64_t hex, int n_module, bool r, bool g) {
     // May be used with output from this: https://xantorohara.github.io/led-matrix-editor/
     for (int row = 0; row < N_ROWS; row++) {
         uint8_t x = 0;
@@ -76,7 +78,7 @@ void frame_insert_modulewise(uint64_t hex, int n_module, bool r, bool g) {
             y = *((uint8_t *)&hex + row);
         }
 
-        current_frame_buffer[row][n_module + 1] = interleave_bits(x, y);
+        frame_buffer[frame_number][row][n_module] = interleave_bits(x, y);
     }
 }
 
@@ -91,12 +93,12 @@ void display_default_frame() {
         // }
 
         // Display some letters (hard coded using 64 bit representation)
-        frame_insert_modulewise(0xc6c6e6f6decec600, 0, 1, 0);
-        frame_insert_modulewise(0x6666667e66663c00, 1, 1, 1);
-        frame_insert_modulewise(0x3c66760606663c00, 2, 0, 1);
-        // frame_buffer_insert_hex(0x3c66666666663c00, 3, 1, 1);
-        // frame_buffer_insert_hex(0x1818183c66666600, 4, 1, 0);
-        // frame_buffer_insert_hex(0x6666667e66663c00, 5, 1, 1);
+        frame_insert_modulewise(0, 0xc6c6e6f6decec600, 0, 1, 0);
+        frame_insert_modulewise(0, 0x6666667e66663c00, 1, 1, 1);
+        frame_insert_modulewise(0, 0x3c66760606663c00, 2, 0, 1);
+        // frame_insert_modulewise(0, 0x3c66666666663c00, 3, 1, 1);
+        // frame_insert_modulewise(0, 0x1818183c66666600, 4, 1, 0);
+        // frame_insert_modulewise(0, 0x6666667e66663c00, 5, 1, 1);
         // frame_buffer_insert_hex(0x0, 6, 0, 1);
     }
 }
@@ -134,8 +136,36 @@ void rotate_frame_buffer(int n) {
     }
 }
 
-bool modify_frame_callback(__unused struct repeating_timer *t) {
-    rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
+/**
+ * @brief Copy frame from frame buffer to currently displayed frame buffer
+ *
+ * @param frame_number Position of the fram in the frame buffer
+ * @param offset Offset to apply to the frame (shift to the left)
+ */
+void latch_frame(uint32_t frame_number, uint32_t offset) {
+    int32_t bit_offset = offset % 16;
+    int32_t module_offset = offset / 16;
+    for (int row = 0; row < N_ROWS; row++) {
+        // Left most bits of left most module moved to right side of module
+        uint16_t carry = frame_buffer[frame_number][row][module_offset % N_DISPLAY_MODULES] << (16 - bit_offset);
+        uint16_t next_carry;
+        for (int module = N_DISPLAY_MODULES - 1; module >= 0; module--) { // Start with right most module
+            // Left most bit of current module (to be shifted out) moved to right side of module
+            next_carry = frame_buffer[frame_number][row][(module + module_offset) % N_DISPLAY_MODULES] << (16 - bit_offset);
+            current_frame_buffer[row][module + 1] = (frame_buffer[frame_number][row][(module + module_offset) % N_DISPLAY_MODULES] >> bit_offset) | carry;
+            carry = next_carry; // Update carry for next module to the shifted out bit
+        }
+    }
+    current_frame_number = frame_number;
+    current_frame_offset = offset;
+}
+
+bool update_frame_callback(__unused struct repeating_timer *t) {
+    // Rotate to the left
+    latch_frame(current_frame_number, (current_frame_offset + 2) % (N_DISPLAY_MODULES * 16));
+    // Rotate to the right
+    // latch_frame(current_frame_number, (current_frame_offset + N_DISPLAY_MODULES * 16 - 2) % (N_DISPLAY_MODULES * 16));
+    // rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
     return true;
 }
 
@@ -325,7 +355,7 @@ int main() {
 
     // Setup timer for frame modification callback (do something like rotate the frame buffer)
     struct repeating_timer timer;
-    add_repeating_timer_ms(50, modify_frame_callback, NULL, &timer);
+    add_repeating_timer_ms(50, update_frame_callback, NULL, &timer);
 
     // Everything else from this point is interrupt-driven. The processor has
     // time to sit and think about its early retirement -- maybe open a bakery?

@@ -233,11 +233,14 @@ void __not_in_flash_func(row_done_handler)() {
  * @brief Handler called after complete frame received via UART
  */
 void __not_in_flash_func(frame_received_handler)() {
-    // Latch rx buffer to actual frame buffer
-    for (int row = 0; row < N_ROWS; row++) {
-        for (int col = 0; col < N_DISPLAY_MODULES; col++) {
-            // For now just write to frame zero (TODO: Select frame in header transfered via UART)
-            frame_buffer[0][row][col] = frame_buffer_uart_rx.frame[row][col];
+    // If invalid frame index received, ignore the received data
+    if (frame_buffer_uart_rx.frame_i < FB_DEPTH) {
+        // Latch rx buffer to actual frame buffer
+        for (int row = 0; row < N_ROWS; row++) {
+            for (int col = 0; col < N_DISPLAY_MODULES; col++) {
+                // Write to selected frame in the frame buffer
+                frame_buffer[frame_buffer_uart_rx.frame_i][row][col] = frame_buffer_uart_rx.frame[row][col];
+            }
         }
     }
     // Clear the interrupt

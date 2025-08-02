@@ -64,8 +64,11 @@ def frame_buffer_insert_single(frame, frame_single, n_module: int, r: bool, g: b
             raise ValueError("Operation must be 'and' or 'or' or None.")
 
 
-def transmit_frame(ser, frame):
-    bytes_data = frame.tobytes()
+def transmit_frame(ser, frame, frame_i):
+    # Ravel and preprend the header.
+    # Ravel and then tobytes is equivalent to directly calling tobytes.
+    frame_with_header = np.concatenate([np.array([frame_i], dtype=np.uint16), frame.ravel()])
+    bytes_data = frame_with_header.tobytes()
     ser.write(bytes_data)
 
 
@@ -97,7 +100,7 @@ def example_static_frame():
     # print(np.vectorize(np.binary_repr)(frame, width=16))
 
     # Transmit the frame
-    transmit_frame(ser, frame)
+    transmit_frame(ser, frame, 0)
     # Apparenty not wating for a little here causes inclomplete transmission even when I set no timeout for the serial.
     # Write should be blocking, so not sure what is the problem here.
     time.sleep(ser.timeout)
@@ -129,7 +132,7 @@ def example_static_text():
     # print(np.vectorize(np.binary_repr)(frame, width=16))
 
     # Transmit the frame
-    transmit_frame(ser, frame)
+    transmit_frame(ser, frame, 0)
     # Apparenty not wating for a little here causes inclomplete transmission even when I set no timeout for the serial.
     # Write should be blocking, so not sure what is the problem here.
     time.sleep(ser.timeout)
@@ -155,7 +158,7 @@ def example_time():
         # print(np.vectorize(np.binary_repr)(frame, width=16))
 
         # Transmit the frame
-        transmit_frame(ser, frame)
+        transmit_frame(ser, frame, 0)
         time.sleep(1/60)
 
 def example_image():
@@ -185,7 +188,7 @@ def example_image():
         frame_buffer_insert_single(frame, grn_pos, i, False, True, op="or")
 
     # Transmit the frame
-    transmit_frame(ser, frame)
+    transmit_frame(ser, frame, 0)
     time.sleep(ser.timeout)
 
 

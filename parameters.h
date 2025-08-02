@@ -26,7 +26,7 @@
 #define N_DISPLAY_MODULES 9
 
 // Maximum number of frames the on-device frame buffer can hold
-#define FB_DEPTH 1
+#define FB_DEPTH 5
 
 // Bit rate for tlc59283 serial link.
 // We transmit one bit per clock so this is equivalent to the serial links clock frequency.
@@ -61,8 +61,8 @@ typedef uint16_t h_row_t[N_DISPLAY_MODULES + 1];
 typedef h_row_t h_frame_t[N_ROWS];
 // Types for UART frame transfer (with metadata header)
 typedef struct r_frame {
-    // uint16_t frame_i; // Frame index (location in frame buffer)
-    frame_t frame; // The actual frame data
+    uint16_t frame_i; // Frame index (location in frame buffer)
+    frame_t frame;    // The actual frame data
 } r_frame_t;
 
 #endif // !LEDMAT_PARAMETERS

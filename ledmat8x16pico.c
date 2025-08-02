@@ -194,6 +194,8 @@ void __not_in_flash_func(row_done_handler)() {
         gpio_put(PIN_BLANK, 1); // Blank the display
         // Strobe latch pin to latch shifted in value
         gpio_put(PIN_LATCH, 1);
+        // This cannot be to short of a pulse! (TODO: Include the blank/latch pulse in PIO program)
+        busy_wait_us(1);
         gpio_put(PIN_LATCH, 0);
 
         // Turn off current row

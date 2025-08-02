@@ -234,7 +234,8 @@ void __not_in_flash_func(frame_received_handler)() {
     // Latch rx buffer to actual frame buffer
     for (int row = 0; row < N_ROWS; row++) {
         for (int col = 0; col < N_DISPLAY_MODULES; col++) {
-            current_frame_buffer[row][col + 1] = frame_buffer_uart_rx[row][col];
+            // For now just write to frame zero (TODO: Select frame in header transfered via UART)
+            frame_buffer[0][row][col] = frame_buffer_uart_rx[row][col];
         }
     }
     // Clear the interrupt

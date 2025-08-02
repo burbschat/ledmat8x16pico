@@ -1,4 +1,6 @@
 #include "pico/stdlib.h"
+#ifndef LEDMAT_PARAMETERS
+#define LEDMAT_PARAMETERS
 
 // Pins for tlc59283 serial link.
 // Both pins must be on the same GPIO group (0->31 or 16->47) as "No single PIO
@@ -56,3 +58,4 @@ typedef frame_t framebuffer_t[FB_DEPTH];
 // Types for a frame with row header (used for currently displayed frame)
 typedef uint16_t h_row_t[N_DISPLAY_MODULES + 1];
 typedef h_row_t h_frame_t[N_ROWS];
+#endif // !LEDMAT_PARAMETERS

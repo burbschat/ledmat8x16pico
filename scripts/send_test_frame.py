@@ -7,7 +7,7 @@ from skimage import io
 
 
 # Must match parameters of the pico firmware!
-N_DISPLAY_MODULES = 7
+N_DISPLAY_MODULES = 9
 N_ROWS = 8
 
 def interleave_uint8(x, y):
@@ -116,7 +116,7 @@ def example_static_text():
     font = Font("./fonts/ibmfonts/bdf/ib8x8u.bdf")
 
     # Text to display
-    text = "hello "
+    text = "123456789"
 
     ser = setup_serial()
 
@@ -144,8 +144,9 @@ def example_time():
     frame = get_empty_frame_buffer()
 
     while True:
-        # text = datetime.now().strftime("%H:%M:%S ")
-        text = datetime.now().strftime(" %S ")
+        text = datetime.now().strftime("%H:%M:%S ")
+        # text = datetime.now().strftime(" %S ")
+        # text = str(time.time_ns())[-3:]
 
         for i in range(N_DISPLAY_MODULES):
             char_data = get_char_data(font, text[i % len(text)])
@@ -155,7 +156,7 @@ def example_time():
 
         # Transmit the frame
         transmit_frame(ser, frame)
-        time.sleep(1)
+        time.sleep(1/60)
 
 def example_image():
     # Setup UART serial
@@ -189,4 +190,4 @@ def example_image():
 
 
 if __name__ == "__main__":
-    example_static_text()
+    example_static_frame()

@@ -33,7 +33,7 @@
 // Was able to drive my modules at the advertised frequency of 35MHz for the tlc59283. This would
 // work even with 40cm extension wires between modules on the first prototype which has some clock
 // coupling into neighboring lines.
-#define TLC59283_TX_FREQ 35000000
+#define TLC59283_TX_FREQ 20000000
 
 // Frame receive UART parameters.
 // Could use 16 data bits as this corresponds to exactly the module width. Two transmissions is also

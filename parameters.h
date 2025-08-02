@@ -44,6 +44,7 @@
 #define UART_RX_PIN 1
 #define UART_BAUD_RATE 115200
 #define UART_DATA_BITS 8
+#define UART_DMA_SIZE DMA_SIZE_8 // Must match UART_DATA_BITS
 #define UART_PARITY UART_PARITY_NONE
 #define UART_STOP_BITS 1
 
@@ -58,4 +59,10 @@ typedef frame_t framebuffer_t[FB_DEPTH];
 // Types for a frame with row header (used for currently displayed frame)
 typedef uint16_t h_row_t[N_DISPLAY_MODULES + 1];
 typedef h_row_t h_frame_t[N_ROWS];
+// Types for UART frame transfer (with metadata header)
+typedef struct r_frame {
+    // uint16_t frame_i; // Frame index (location in frame buffer)
+    frame_t frame; // The actual frame data
+} r_frame_t;
+
 #endif // !LEDMAT_PARAMETERS

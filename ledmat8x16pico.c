@@ -33,7 +33,7 @@ volatile uint32_t current_frame_offset;
 // Received frame data is written to this memory region via DMA, thus assuming that we have one
 // continous region (rows appended to each other). This does not include a 16 bit row length
 // header.
-volatile frame_t frame_buffer_uart_rx;
+volatile r_frame_t frame_buffer_uart_rx;
 
 // Keep track of the last row pulsed an next one for which data should be transmitted.
 volatile uint8_t current_row = N_ROWS - 1;
@@ -237,12 +237,12 @@ void __not_in_flash_func(frame_received_handler)() {
     for (int row = 0; row < N_ROWS; row++) {
         for (int col = 0; col < N_DISPLAY_MODULES; col++) {
             // For now just write to frame zero (TODO: Select frame in header transfered via UART)
-            frame_buffer[0][row][col] = frame_buffer_uart_rx[row][col];
+            frame_buffer[0][row][col] = frame_buffer_uart_rx.frame[row][col];
         }
     }
     // Clear the interrupt
     dma_hw->ints0 = 1u << uartdma_chan;
-    dma_channel_set_write_addr(uartdma_chan, frame_buffer_uart_rx, true);
+    dma_channel_set_write_addr(uartdma_chan, &frame_buffer_uart_rx, true);
 }
 
 void init_uart_frame_receive() {
@@ -259,7 +259,7 @@ void init_uart_frame_receive() {
     uartdma_chan = dma_claim_unused_channel(true);
     dma_channel_config uartdma_conf = dma_channel_get_default_config(uartdma_chan);
     // One module has 16 columns but uart characters are 8 bit, so transfer in 8 bit chunks
-    channel_config_set_transfer_data_size(&uartdma_conf, DMA_SIZE_8);
+    channel_config_set_transfer_data_size(&uartdma_conf, UART_DMA_SIZE);
     // Keep reading from the same address for each block (technically the default?)
     channel_config_set_read_increment(&uartdma_conf, false);
     // Increment write address after each written block
@@ -269,10 +269,10 @@ void init_uart_frame_receive() {
 
     dma_channel_configure(
         uartdma_chan, &uartdma_conf,
-        frame_buffer_uart_rx,           // Don't provide a write address yet
-        &((uart_hw_t *)UART_ID)->dr,    // Read address
-        N_DISPLAY_MODULES * 2 * N_ROWS, // Receive one full frame at a time in 8 bit chunks
-        true                            // Immediately start
+        &frame_buffer_uart_rx,                  // Don't provide a write address yet
+        &((uart_hw_t *)UART_ID)->dr,            // Read address
+        sizeof(r_frame_t) * 8 / UART_DATA_BITS, // Receive one full frame at a time in 8 bit chunks
+        true                                    // Immediately start
     );
 
     // Enable interrupt via IRQ1 (IRQ0 used for PIO interrupt)

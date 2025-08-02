@@ -190,4 +190,4 @@ def example_image():
 
 
 if __name__ == "__main__":
-    example_static_frame()
+    example_static_text()

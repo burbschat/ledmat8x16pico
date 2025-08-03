@@ -177,6 +177,16 @@ bool clear_row_done_interrupt(__unused struct repeating_timer *t) {
     return false;
 }
 
+bool row_blank_interrupt(__unused struct repeating_timer *t) {
+    // Add another timer and blank the display for some time before sending the next row.
+    // This can be used as a way to adjust perceived brightness. It should be hooked into the row
+    // update cycle to avoid beating due to different frequencies of blank pulsing and row update.
+    static struct repeating_timer row_blank_timer;
+    gpio_put(PIN_BLANK, 1); // Blank the display
+    add_repeating_timer_us(ROW_CLEAR_US, clear_row_done_interrupt, NULL, &row_blank_timer);
+    return false;
+}
+
 /**
  * @brief Handler called after each row transmission
  */
@@ -191,7 +201,8 @@ void __not_in_flash_func(row_done_handler)() {
     if (first_run) {
         first_run = false;
     } else {
-        gpio_put(PIN_BLANK, 1); // Blank the display
+        // Here the display is already blank as we set it blank as the second step of the wait until
+        // the next row transmit. 
         // Strobe latch pin to latch shifted in value
         gpio_put(PIN_LATCH, 1);
         // This cannot be to short of a pulse! Maybe include the blank/latch pulse in PIO program?
@@ -219,17 +230,19 @@ void __not_in_flash_func(row_done_handler)() {
     pio_interrupt_clear(pio, 0);
     irq_clear(PIO0_IRQ_0);
 
-    // Set a timer and call a callback that dispatches the dma once the timer expires.
-    // This way we can make sure to wait more or less the time we want the row to be illuminated
-    // without blocking the whole core. Have clear_row_done_interrupt() return false, which will
-    // cause the timer to be removed on return of the callback.
+    // Set a timer and call a callback that dispatches the dma once the timer expires. This way we
+    // can make sure to wait more or less the time we want the row to be illuminated without
+    // blocking the whole core. Have the interrupts return false, which will cause the timer to be
+    // removed on return of the callback.
     // The interrupt flags must be cleared before returning from this function as if not cleared
     // this handler is just immediately called again. Thus we cannot have the PIO SM wait for the
     // IRQ flag to be cleared. Instead we utilize that the SM will stay stalled at the out
     // instruction until there is some data in the RX fifo (provided via DMA). The DMA then is
     // dispatched by the callback called by the timer.
-    add_repeating_timer_us(ROW_ILLUMINATE_US, clear_row_done_interrupt, NULL,
-                           &row_illuminated_timer);
+    // Actually there are two timers, the first one for the duration the row is on, the second one
+    // for the duration it will be off (just assert blank pin). This can be used as a way of
+    // reducing the display brighness and appears to work pretty good.
+    add_repeating_timer_us(ROW_ILLUMINATE_US, row_blank_interrupt, NULL, &row_illuminated_timer);
 }
 
 /**

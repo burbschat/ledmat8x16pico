@@ -17,8 +17,10 @@
 #define N_ROWS 8
 #define PIN_ROWS_BASE 6 // Use N_ROWs row strobe pins starting at this pin
 
-// Time each row will be illuminated
-#define ROW_ILLUMINATE_US 1000
+// Time each row will be illuminated and not illuminated. The sum of those times controls the time
+// per row update. Adjust the ratio to reduce perceived brightness.
+#define ROW_ILLUMINATE_US 300
+#define ROW_CLEAR_US 700
 
 // Number of display modules for which data should be transmitted. It is possible to have less
 // modules connected than this number. In this case the data is simply shifted past the last module

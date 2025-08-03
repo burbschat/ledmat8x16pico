@@ -194,8 +194,11 @@ void __not_in_flash_func(row_done_handler)() {
         gpio_put(PIN_BLANK, 1); // Blank the display
         // Strobe latch pin to latch shifted in value
         gpio_put(PIN_LATCH, 1);
-        // This cannot be to short of a pulse! (TODO: Include the blank/latch pulse in PIO program)
-        busy_wait_us(1);
+        // This cannot be to short of a pulse! Maybe include the blank/latch pulse in PIO program?
+        // As the shortest wait function (busy_wait_us) is us, use nop instruction instead (scales
+        // with clock but at 125MHz we should have 8ns). For more delay add more nops with new lines
+        // like "nop\nnop\nnop".
+        __asm volatile("nop" :);
         gpio_put(PIN_LATCH, 0);
 
         // Turn off current row

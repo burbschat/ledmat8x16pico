@@ -45,9 +45,8 @@ static inline void tlc59283_tx_program_init(PIO pio, uint sm, uint offset, uint 
     pio_gpio_init(pio, pin_clk);
     pio_gpio_init(pio, pin_data);
     // Set PIO pin directions to out (isout=true) for clock and data pins.
-    // Clock and data pins may not be consecutive, but there is no
-    // non-consecutive function so I assume we just use consecutive with a
-    // length of only 1.
+    // Clock and data pins may not be consecutive, so call twice with length of
+    // only 1. An alternative would be pio_sm_set_pindirs_with_mask.
     pio_sm_set_consecutive_pindirs(pio, sm, pin_clk, 1, true);
     pio_sm_set_consecutive_pindirs(pio, sm, pin_data, 1, true);
 

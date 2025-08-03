@@ -27,4 +27,4 @@ pico_generate_pio_header(ledmat8x16pico ${CMAKE_CURRENT_LIST_DIR}/tlc59283.pio)
 pico_add_extra_outputs(ledmat8x16pico)
 
 # Set libraries to link against
-target_link_libraries(ledmat8x16pico PRIVATE pico_stdlib hardware_pio hardware_dma)
+target_link_libraries(ledmat8x16pico PRIVATE pico_stdlib pico_rand hardware_pio hardware_dma)

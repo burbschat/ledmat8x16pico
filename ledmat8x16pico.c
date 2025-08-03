@@ -1,6 +1,7 @@
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
+#include "pico/rand.h"
 #include "parameters.h"
 #include "pico/stdlib.h"
 #include "tlc59283.pio.h"
@@ -183,7 +184,12 @@ bool row_blank_interrupt(__unused struct repeating_timer *t) {
     // update cycle to avoid beating due to different frequencies of blank pulsing and row update.
     static struct repeating_timer row_blank_timer;
     gpio_put(PIN_BLANK, 1); // Blank the display
-    add_repeating_timer_us(ROW_CLEAR_US, clear_row_done_interrupt, NULL, &row_blank_timer);
+    uint32_t row_clear_us = ROW_CLEAR_US;
+    #ifdef TIMER_RANDOM_OFFSET
+    uint16_t random_offset = get_rand_32() & ~(~0u << TIMER_RANDOM_OFFSET);
+    row_clear_us = row_clear_us + random_offset;
+    #endif /* ifdef TIMER_RANDOM_OFFSET */
+    add_repeating_timer_us(row_clear_us, clear_row_done_interrupt, NULL, &row_blank_timer);
     return false;
 }
 
@@ -242,7 +248,12 @@ void __not_in_flash_func(row_done_handler)() {
     // Actually there are two timers, the first one for the duration the row is on, the second one
     // for the duration it will be off (just assert blank pin). This can be used as a way of
     // reducing the display brighness and appears to work pretty good.
-    add_repeating_timer_us(ROW_ILLUMINATE_US, row_blank_interrupt, NULL, &row_illuminated_timer);
+    uint32_t row_illuminate_us = ROW_ILLUMINATE_US;
+    #ifdef TIMER_RANDOM_OFFSET
+    uint16_t random_offset = get_rand_32() & ~(~0u << TIMER_RANDOM_OFFSET);
+    row_illuminate_us = row_illuminate_us + random_offset;
+    #endif /* ifdef TIMER_RANDOM_OFFSET */
+    add_repeating_timer_us(row_illuminate_us, row_blank_interrupt, NULL, &row_illuminated_timer);
 }
 
 /**

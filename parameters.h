@@ -22,6 +22,11 @@
 #define ROW_ILLUMINATE_US 300
 #define ROW_CLEAR_US 700
 
+// Enable random offsest added to the timer to reduce annoying single frequency noise to some more
+// broadband noise. Value is the number of bits of a 16bit random integer to be used for the offset.
+// Thus the maximum value is 16. Realistically ~9 is probably the maximum value one would chose.
+#define TIMER_RANDOM_OFFSET 8
+
 // Number of display modules for which data should be transmitted. It is possible to have less
 // modules connected than this number. In this case the data is simply shifted past the last module
 // (which ofc means that more data is transmitted for every row than strictly required).

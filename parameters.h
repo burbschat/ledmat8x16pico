@@ -66,6 +66,12 @@
 // Can be flashed to perhaps indicate state machine status or similar.
 #define PIN_LED 25
 
+// Select TinyUSB on second core or interrupt based UART on same core for frame receive.
+// Both may be enabled at the same time, but simultaneous write is not supported, so in
+// practice only one of the two should be used.
+#define FRAME_RECEIVE_UART
+#define FRAME_RECEIVE_TINYUSB
+
 // Types for row, frame and framebuffer itself (rows without header)
 typedef uint16_t row_t[N_DISPLAY_MODULES];
 typedef row_t frame_t[N_ROWS];

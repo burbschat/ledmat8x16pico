@@ -6,6 +6,9 @@
 #include "pico/stdlib.h"
 #include "tlc59283.pio.h"
 #include "util.h"
+#include "tusb.h"
+#include "bsp/board.h"
+#include "pico/multicore.h"
 #include <string.h>
 
 // Some test patterns which may be used for development/tests and also illustrates how the data is
@@ -256,6 +259,8 @@ void __not_in_flash_func(row_done_handler)() {
     add_repeating_timer_us(row_illuminate_us, row_blank_interrupt, NULL, &row_illuminated_timer);
 }
 
+
+#ifdef FRAME_RECEIVE_UART
 /**
  * @brief Handler called after complete frame received via UART
  */
@@ -310,6 +315,36 @@ void init_uart_frame_receive() {
     irq_set_exclusive_handler(DMA_IRQ_1, frame_received_handler);
     irq_set_enabled(DMA_IRQ_1, true);
 }
+#endif
+
+#ifdef FRAME_RECEIVE_TINYUSB
+// Function handling TinyUSB to be run on second core
+void tinyusb_main() {
+
+    board_init();  // Board init required for USB
+
+    tusb_init(); // Initialize TinyUSB
+
+    while (true) {
+        tud_task(); // TinyUSB device task loop
+
+        // Handle CDC data
+        if (tud_cdc_available()) {
+            uint8_t buf[64];
+            uint32_t count = tud_cdc_read(buf, sizeof(buf));
+
+            // Echo back
+            tud_cdc_write(buf, count);
+            tud_cdc_write_flush();
+        }
+    }
+}
+
+void init_tinyusb_frame_receive() {
+    // Run on second core as TinyUSB does not support proper interrupts
+    multicore_launch_core1(tinyusb_main);
+}
+#endif
 
 void init_tlc59283_interface() {
     // Setup used pins
@@ -383,8 +418,13 @@ int main() {
     // Initialize tlc59283 interface
     init_tlc59283_interface();
 
-    // Initialize UART for receiving frames
+    // Initialize UART/TinyUSB for receiving frames
+    #ifdef FRAME_RECEIVE_UART
     init_uart_frame_receive();
+    #endif
+    #ifdef FRAME_RECEIVE_TINYUSB
+    init_tinyusb_frame_receive();
+    #endif
 
     // Setup timer for frame modification callback (do something like rotate the frame buffer)
     struct repeating_timer timer;

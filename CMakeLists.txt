@@ -13,11 +13,10 @@ pico_sdk_init()
 add_executable(ledmat8x16pico)
 
 # Add sources to executable
-target_sources(ledmat8x16pico PRIVATE ledmat8x16pico.c parameters.h util.h util.c)
+target_sources(ledmat8x16pico PRIVATE ledmat8x16pico.c parameters.h util.h util.c usb_descriptors.c)
 
 # Generate header from pio assembly file
 pico_generate_pio_header(ledmat8x16pico ${CMAKE_CURRENT_LIST_DIR}/tlc59283.pio)
-
 
 # Enable stdio output via USB and UART
 #pico_enable_stdio_usb(ledmat8x16pico 1)
@@ -26,5 +25,9 @@ pico_generate_pio_header(ledmat8x16pico ${CMAKE_CURRENT_LIST_DIR}/tlc59283.pio)
 # Enable extra outputs
 pico_add_extra_outputs(ledmat8x16pico)
 
+# Make sure TinyUSB can find tusb_config.h
+target_include_directories(ledmat8x16pico PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+
 # Set libraries to link against
-target_link_libraries(ledmat8x16pico PRIVATE pico_stdlib pico_rand hardware_pio hardware_dma)
+# Perhaps also tinyusb_board is required
+target_link_libraries(ledmat8x16pico PRIVATE pico_stdlib pico_rand hardware_pio hardware_dma pico_multicore tinyusb_device tinyusb_board)

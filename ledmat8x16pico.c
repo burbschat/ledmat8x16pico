@@ -219,9 +219,9 @@ void __not_in_flash_func(row_done_handler)() {
         gpio_put(PIN_LATCH, 0);
 
         // Turn off current row
-        gpio_put(PIN_ROWS_BASE + current_row, 1);
+        gpio_put(ROW_GPIO_FW(current_row), 1);
         // Turn on next row
-        gpio_put(PIN_ROWS_BASE + next_row, 0);
+        gpio_put(ROW_GPIO_FW(next_row), 0);
         gpio_put(PIN_BLANK, 0); // Un-blank the display
 
         // Make the current row the previously next and set new next row

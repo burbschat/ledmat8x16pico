@@ -6,16 +6,23 @@
 // Both pins must be on the same GPIO group (0->31 or 16->47) as "No single PIO
 // instance can interact with both pins 0->15 or 32->47 at the same time." for
 // the rp2350.
-#define PIN_CLK 2
-#define PIN_DATA 3
+#define PIN_CLK 3
+#define PIN_DATA 2
 
 // Pins for other tlc59283 controls (latch, blank)
-#define PIN_LATCH 4
-#define PIN_BLANK 5
+#define PIN_LATCH 17
+#define PIN_BLANK 16
 
 // Row strobe pins
 #define N_ROWS 8
 #define PIN_ROWS_BASE 6 // Use N_ROWs row strobe pins starting at this pin
+// Due to board layout constraints, the order actually ended up inverted. Use
+// the following macro to always get the correct GPIO pin number from the row
+// number. While on the board we use numbers 1 to 8, in firmware use number 0
+// to 7 (makes more sense in code).
+#define ROW_GPIO_FW(ROW) PIN_ROWS_BASE + N_ROWS - 1 - ROW
+// Same but use numbers as used in hardware (1 to 8).
+#define ROW_GPIO_HW(ROW) ROW_GPIO_FW(ROW - 1)
 
 // Time each row will be illuminated and not illuminated. The sum of those times controls the time
 // per row update. Adjust the ratio to reduce perceived brightness.

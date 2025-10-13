@@ -185,10 +185,10 @@ def large_static_text():
         grn_pos = np.roll(grn_pos, -1, axis=1)
         return red_pos, grn_pos
 
-    for i in range(100):
+    for i in range(32):
         ready_to_transmit_frame = prepare_frame(red_pos, grn_pos, alignment="left")
-        transmit_frame(ser, ready_to_transmit_frame, 0)
-        time.sleep(0.05)
+        transmit_frame(ser, ready_to_transmit_frame, i)
+        time.sleep(0.01)
         red_pos, grn_pos = rotate_frame(red_pos, grn_pos)
 
     # Apparenty not wating for a little here causes inclomplete transmission even when I set no timeout for the serial.

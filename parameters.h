@@ -40,7 +40,7 @@
 #define N_DISPLAY_MODULES 8
 
 // Maximum number of frames the on-device frame buffer can hold
-#define FB_DEPTH 5
+#define FB_DEPTH 32
 
 // Bit rate for tlc59283 serial link.
 // We transmit one bit per clock so this is equivalent to the serial links clock frequency.

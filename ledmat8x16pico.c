@@ -166,8 +166,7 @@ void latch_frame(uint32_t frame_number, uint32_t offset) {
 
 bool update_frame_callback(__unused struct repeating_timer *t) {
     // Rotate to the left
-    // latch_frame(current_frame_number, (current_frame_offset + 2) % (N_DISPLAY_MODULES * 16));
-    latch_frame(current_frame_number, 0);
+    latch_frame((current_frame_number + 1) % FB_DEPTH, current_frame_offset % (N_DISPLAY_MODULES * 16));
     // Rotate to the right
     // latch_frame(current_frame_number, (current_frame_offset + N_DISPLAY_MODULES * 16 - 2) % (N_DISPLAY_MODULES * 16));
     // rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)

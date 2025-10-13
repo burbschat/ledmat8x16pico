@@ -2,6 +2,7 @@ from skimage import io
 import numpy as np
 import time
 from bdfparser import Font
+from PIL import Image, ImageFont, ImageDraw
 
 np.set_printoptions(edgeitems=100, linewidth=1000000, formatter=dict(float=lambda x: "%.3g" % x))
 from send_test_frame import N_ROWS, N_DISPLAY_MODULES, transmit_frame, setup_serial
@@ -159,25 +160,84 @@ def large_frame_image(image_path="./example_image_16x16.png"):
     time.sleep(ser.timeout)  # Wait a little before returning to ensure transmit complete
 
 
+class FontTTF:
+    def __init__(self, font_path):
+        self.font = ImageFont.truetype(font_path, size=16)
+
+    def get_char(self, char):
+        bbox = self.font.getbbox(char)
+        width = bbox[2] - bbox[0]
+        height = bbox[3] - bbox[1]
+
+        # Create monochrome image with enough space
+        image = Image.new("1", (width, height), 0)
+        draw = ImageDraw.Draw(image)
+
+        # Note: offset by (-bbox[0], -bbox[1]) to account for font origin
+        draw.text((-bbox[0], -bbox[1]), char, font=self.font, fill=1)
+
+        # Convert to numpy array
+        return np.array(image, dtype=np.uint8)
+
+
+class FontBDF:
+    def __init__(self, font_path):
+        self.font = Font(font_path)
+
+    def get_char(self, char):
+        return np.array(self.font.glyph(char).draw().todata(datatype=2))
+
+
 def large_static_text():
     # Load bitmap font
-    font = Font("./fonts/ibmfonts/bdf/ib16x16u.bdf")
+    # font = FontBDF("./fonts/ibmfonts/bdf/ib16x16u.bdf")
+    font = FontTTF("./fonts/jfdotfont/JF-Dot-jiskan16.ttf")
 
     ser = setup_serial()
 
     # Text to display
-    text = "AB"
+    # text = "Hello this is a long sentence!  "
+    text = "/r次は/g東京/g　/r/g右側/g/rの扉が開きます　　"
 
-    char_data = None
+    red_pos = None
+    grn_pos = None
+
+    state = "normal"
+    en_red = False
+    en_grn = False
     for char in text:
-        next_char_data = np.array(font.glyph(char).draw().todata(datatype=2))
-        if char_data is not None:
-            char_data = np.hstack([char_data, next_char_data])
-        else:
-            char_data = next_char_data
+        if state == "normal":
+            if char == "/":
+                state = "command"
+                continue
+            else:
+                next_char_data = font.get_char(char)
+                if en_red:
+                    next_char_data_red = next_char_data
+                else:
+                    next_char_data_red = np.zeros_like(next_char_data)
 
-    red_pos = char_data
-    grn_pos = np.zeros_like(red_pos)
+                if en_grn:
+                    next_char_data_grn = next_char_data
+                else:
+                    next_char_data_grn = np.zeros_like(next_char_data)
+
+                if grn_pos is not None:
+                    grn_pos = np.hstack([grn_pos, next_char_data_grn])
+                else:
+                    grn_pos = next_char_data_grn
+
+                if red_pos is not None:
+                    red_pos = np.hstack([red_pos, next_char_data_red])
+                else:
+                    red_pos = next_char_data_red
+        elif state == "command":
+            if char == "r":
+                en_red = not en_red
+            if char == "g":
+                en_grn = not en_grn
+            state = "normal"
+            continue
 
     # Shift each row to the left
     def rotate_frame(red_pos, grn_pos):
@@ -185,10 +245,11 @@ def large_static_text():
         grn_pos = np.roll(grn_pos, -1, axis=1)
         return red_pos, grn_pos
 
-    for i in range(32):
+    # For now this will only properly work (no sudden jumps) if text is padded to match frame buffer depth
+    for i in range(32 * 16):
         ready_to_transmit_frame = prepare_frame(red_pos, grn_pos, alignment="left")
         transmit_frame(ser, ready_to_transmit_frame, i)
-        time.sleep(0.01)
+        # time.sleep(0.01)
         red_pos, grn_pos = rotate_frame(red_pos, grn_pos)
 
     # Apparenty not wating for a little here causes inclomplete transmission even when I set no timeout for the serial.

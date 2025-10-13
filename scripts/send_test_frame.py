@@ -7,7 +7,7 @@ from skimage import io
 
 
 # Must match parameters of the pico firmware!
-N_DISPLAY_MODULES = 9
+N_DISPLAY_MODULES = 8
 N_ROWS = 8
 
 def interleave_uint8(x, y):

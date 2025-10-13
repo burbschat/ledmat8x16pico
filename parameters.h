@@ -37,7 +37,7 @@
 // Number of display modules for which data should be transmitted. It is possible to have less
 // modules connected than this number. In this case the data is simply shifted past the last module
 // (which ofc means that more data is transmitted for every row than strictly required).
-#define N_DISPLAY_MODULES 9
+#define N_DISPLAY_MODULES 8
 
 // Maximum number of frames the on-device frame buffer can hold
 #define FB_DEPTH 5

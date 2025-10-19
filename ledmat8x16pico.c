@@ -37,7 +37,12 @@ volatile uint32_t current_frame_offset;
 // Received frame data is written to this memory region via DMA, thus assuming that we have one
 // continous region (rows appended to each other). This does not include a 16 bit row length
 // header.
-volatile r_frame_t frame_buffer_uart_rx;
+volatile r_frame_t frame_buffer_serial_rx;
+
+#ifdef FRAME_RECEIVE_TINYUSB
+// Counter to keep track of received bytes when using tinyusb cdc
+volatile int32_t cdc_bytes_recevied = 0;
+#endif
 
 // Keep track of the last row pulsed an next one for which data should be transmitted.
 volatile uint8_t current_row = N_ROWS - 1;
@@ -259,25 +264,33 @@ void __not_in_flash_func(row_done_handler)() {
     add_repeating_timer_us(row_illuminate_us, row_blank_interrupt, NULL, &row_illuminated_timer);
 }
 
+int copy_serial_rx_to_framebuffer() {
+    // If invalid frame index received, ignore the received data
+    if (frame_buffer_serial_rx.frame_i < FB_DEPTH) {
+        // Latch rx buffer to actual frame buffer
+        for (int row = 0; row < N_ROWS; row++) {
+            for (int col = 0; col < N_DISPLAY_MODULES; col++) {
+                // Write to selected frame in the frame buffer
+                frame_buffer[frame_buffer_serial_rx.frame_i][row][col] = frame_buffer_serial_rx.frame[row][col];
+            }
+        }
+        return 0;
+    } else {
+        return 1;  // Invalid frame number
+    }
+}
 
 #ifdef FRAME_RECEIVE_UART
 /**
  * @brief Handler called after complete frame received via UART
  */
 void __not_in_flash_func(frame_received_handler)() {
-    // If invalid frame index received, ignore the received data
-    if (frame_buffer_uart_rx.frame_i < FB_DEPTH) {
-        // Latch rx buffer to actual frame buffer
-        for (int row = 0; row < N_ROWS; row++) {
-            for (int col = 0; col < N_DISPLAY_MODULES; col++) {
-                // Write to selected frame in the frame buffer
-                frame_buffer[frame_buffer_uart_rx.frame_i][row][col] = frame_buffer_uart_rx.frame[row][col];
-            }
-        }
-    }
+    // Move frame in receive buffer to framebuffer
+    copy_serial_rx_to_framebuffer();
+
     // Clear the interrupt
     dma_hw->ints0 = 1u << uartdma_chan;
-    dma_channel_set_write_addr(uartdma_chan, &frame_buffer_uart_rx, true);
+    dma_channel_set_write_addr(uartdma_chan, &frame_buffer_serial_rx, true);
 }
 
 void init_uart_frame_receive() {
@@ -304,7 +317,7 @@ void init_uart_frame_receive() {
 
     dma_channel_configure(
         uartdma_chan, &uartdma_conf,
-        &frame_buffer_uart_rx,                  // Don't provide a write address yet
+        &frame_buffer_serial_rx,                // Don't provide a write address yet
         &((uart_hw_t *)UART_ID)->dr,            // Read address
         sizeof(r_frame_t) * 8 / UART_DATA_BITS, // Receive one full frame at a time in 8 bit chunks
         true                                    // Immediately start
@@ -319,6 +332,8 @@ void init_uart_frame_receive() {
 
 #ifdef FRAME_RECEIVE_TINYUSB
 // Function handling TinyUSB to be run on second core
+// Can test throughput using something like
+// dd if=/dev/zero of=/dev/ttyACM1 count=10000 status=progress
 void tinyusb_main() {
 
     board_init();  // Board init required for USB
@@ -330,12 +345,20 @@ void tinyusb_main() {
 
         // Handle CDC data
         if (tud_cdc_available()) {
-            uint8_t buf[64];
-            uint32_t count = tud_cdc_read(buf, sizeof(buf));
-
-            // Echo back
-            tud_cdc_write(buf, count);
-            tud_cdc_write_flush();
+            uint32_t bytes_requested = sizeof(frame_buffer_serial_rx) - cdc_bytes_recevied;
+            // Cast to uint8 first to add the offset given in bytes, then cast
+            // to void pointer required for tud_cdc_read
+            uint32_t bytes_received = tud_cdc_read((void *)((uint8_t *)&frame_buffer_serial_rx + cdc_bytes_recevied), sizeof(frame_buffer_serial_rx));
+            if (bytes_received >= bytes_requested) {  // Actually > should never apply
+                // One frame completed, reset the counter
+                cdc_bytes_recevied = 0;
+                // Copy rx buffer over to the frame buffer, the location in the
+                // frame buffer being contained in the struct itself.
+                copy_serial_rx_to_framebuffer();
+            } else {
+                // Not done yet, but keep track of the number of bytes received so far
+                cdc_bytes_recevied += bytes_received;
+            }
         }
     }
 }

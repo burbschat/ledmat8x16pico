@@ -72,11 +72,11 @@ def transmit_frame(ser, frame, frame_i):
     ser.write(bytes_data)
 
 
-def setup_serial(port="/dev/ttyACM0"):
+def setup_serial(port="/dev/ttyACM0", baudrate=115200, timeout=1.0):
     # Setup serial interface (adjust port as required)
     ser = serial.Serial(port)
-    ser.baudrate = 115200
-    ser.timeout = 1.0
+    ser.baudrate = baudrate
+    ser.timeout = timeout
     return ser
 
 def get_empty_frame_buffer():

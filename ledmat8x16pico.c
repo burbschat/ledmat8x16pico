@@ -1,14 +1,14 @@
+#include "bsp/board.h"
 #include "hardware/dma.h"
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
-#include "pico/rand.h"
 #include "parameters.h"
+#include "pico/multicore.h"
+#include "pico/rand.h"
 #include "pico/stdlib.h"
 #include "tlc59283.pio.h"
-#include "util.h"
 #include "tusb.h"
-#include "bsp/board.h"
-#include "pico/multicore.h"
+#include "util.h"
 #include <string.h>
 
 // Some test patterns which may be used for development/tests and also illustrates how the data is
@@ -139,7 +139,8 @@ void rotate_frame_buffer(int n) {
              module--) { // Start with right most module
             // Left most bit of current module (to be shifted out) moved to right side of module
             next_carry = current_frame_buffer[row][module + 1] << (16 - n);
-            current_frame_buffer[row][module + 1] = (current_frame_buffer[row][module + 1] >> n) | carry;
+            current_frame_buffer[row][module + 1] =
+                (current_frame_buffer[row][module + 1] >> n) | carry;
             carry = next_carry; // Update carry for next module to the shifted out bit
         }
     }
@@ -156,12 +157,19 @@ void latch_frame(uint32_t frame_number, uint32_t offset) {
     int32_t module_offset = offset / 16;
     for (int row = 0; row < N_ROWS; row++) {
         // Left most bits of left most module moved to right side of module
-        uint16_t carry = frame_buffer[frame_number][row][module_offset % N_DISPLAY_MODULES] << (16 - bit_offset);
+        uint16_t carry = frame_buffer[frame_number][row][module_offset % N_DISPLAY_MODULES]
+                         << (16 - bit_offset);
         uint16_t next_carry;
-        for (int module = N_DISPLAY_MODULES - 1; module >= 0; module--) { // Start with right most module
+        for (int module = N_DISPLAY_MODULES - 1; module >= 0;
+             module--) { // Start with right most module
             // Left most bit of current module (to be shifted out) moved to right side of module
-            next_carry = frame_buffer[frame_number][row][(module + module_offset) % N_DISPLAY_MODULES] << (16 - bit_offset);
-            current_frame_buffer[row][module + 1] = (frame_buffer[frame_number][row][(module + module_offset) % N_DISPLAY_MODULES] >> bit_offset) | carry;
+            next_carry =
+                frame_buffer[frame_number][row][(module + module_offset) % N_DISPLAY_MODULES]
+                << (16 - bit_offset);
+            current_frame_buffer[row][module + 1] =
+                (frame_buffer[frame_number][row][(module + module_offset) % N_DISPLAY_MODULES] >>
+                 bit_offset) |
+                carry;
             carry = next_carry; // Update carry for next module to the shifted out bit
         }
     }
@@ -171,10 +179,12 @@ void latch_frame(uint32_t frame_number, uint32_t offset) {
 
 bool update_frame_callback(__unused struct repeating_timer *t) {
     // Rotate to the left
-    latch_frame((current_frame_number + 1) % FB_DEPTH, current_frame_offset % (N_DISPLAY_MODULES * 16));
+    latch_frame((current_frame_number + 1) % FB_DEPTH,
+                current_frame_offset % (N_DISPLAY_MODULES * 16));
     // Rotate to the right
-    // latch_frame(current_frame_number, (current_frame_offset + N_DISPLAY_MODULES * 16 - 2) % (N_DISPLAY_MODULES * 16));
-    // rotate_frame_buffer(2); // Rotate two positions (one LED slot as there are two LEDs per slot)
+    // latch_frame(current_frame_number, (current_frame_offset + N_DISPLAY_MODULES * 16 - 2) %
+    // (N_DISPLAY_MODULES * 16)); rotate_frame_buffer(2); // Rotate two positions (one LED slot as
+    // there are two LEDs per slot)
     return true;
 }
 
@@ -193,10 +203,10 @@ bool row_blank_interrupt(__unused struct repeating_timer *t) {
     static struct repeating_timer row_blank_timer;
     gpio_put(PIN_BLANK, 1); // Blank the display
     uint32_t row_clear_us = ROW_CLEAR_US;
-    #ifdef TIMER_RANDOM_OFFSET
+#ifdef TIMER_RANDOM_OFFSET
     uint16_t random_offset = get_rand_32() & ~(~0u << TIMER_RANDOM_OFFSET);
     row_clear_us = row_clear_us + random_offset;
-    #endif /* ifdef TIMER_RANDOM_OFFSET */
+#endif /* ifdef TIMER_RANDOM_OFFSET */
     add_repeating_timer_us(row_clear_us, clear_row_done_interrupt, NULL, &row_blank_timer);
     return false;
 }
@@ -216,7 +226,7 @@ void __not_in_flash_func(row_done_handler)() {
         first_run = false;
     } else {
         // Here the display is already blank as we set it blank as the second step of the wait until
-        // the next row transmit. 
+        // the next row transmit.
         // Strobe latch pin to latch shifted in value
         gpio_put(PIN_LATCH, 1);
         // This cannot be to short of a pulse! Maybe include the blank/latch pulse in PIO program?
@@ -257,10 +267,10 @@ void __not_in_flash_func(row_done_handler)() {
     // for the duration it will be off (just assert blank pin). This can be used as a way of
     // reducing the display brighness and appears to work pretty good.
     uint32_t row_illuminate_us = ROW_ILLUMINATE_US;
-    #ifdef TIMER_RANDOM_OFFSET
+#ifdef TIMER_RANDOM_OFFSET
     uint16_t random_offset = get_rand_32() & ~(~0u << TIMER_RANDOM_OFFSET);
     row_illuminate_us = row_illuminate_us + random_offset;
-    #endif /* ifdef TIMER_RANDOM_OFFSET */
+#endif /* ifdef TIMER_RANDOM_OFFSET */
     add_repeating_timer_us(row_illuminate_us, row_blank_interrupt, NULL, &row_illuminated_timer);
 }
 
@@ -271,12 +281,13 @@ int copy_serial_rx_to_framebuffer() {
         for (int row = 0; row < N_ROWS; row++) {
             for (int col = 0; col < N_DISPLAY_MODULES; col++) {
                 // Write to selected frame in the frame buffer
-                frame_buffer[frame_buffer_serial_rx.frame_i][row][col] = frame_buffer_serial_rx.frame[row][col];
+                frame_buffer[frame_buffer_serial_rx.frame_i][row][col] =
+                    frame_buffer_serial_rx.frame[row][col];
             }
         }
         return 0;
     } else {
-        return 1;  // Invalid frame number
+        return 1; // Invalid frame number
     }
 }
 
@@ -336,7 +347,7 @@ void init_uart_frame_receive() {
 // dd if=/dev/zero of=/dev/ttyACM1 count=10000 status=progress
 void tinyusb_main() {
 
-    board_init();  // Board init required for USB
+    board_init(); // Board init required for USB
 
     tusb_init(); // Initialize TinyUSB
 
@@ -348,8 +359,10 @@ void tinyusb_main() {
             uint32_t bytes_requested = sizeof(frame_buffer_serial_rx) - cdc_bytes_recevied;
             // Cast to uint8 first to add the offset given in bytes, then cast
             // to void pointer required for tud_cdc_read
-            uint32_t bytes_received = tud_cdc_read((void *)((uint8_t *)&frame_buffer_serial_rx + cdc_bytes_recevied), sizeof(frame_buffer_serial_rx));
-            if (bytes_received >= bytes_requested) {  // Actually > should never apply
+            uint32_t bytes_received =
+                tud_cdc_read((void *)((uint8_t *)&frame_buffer_serial_rx + cdc_bytes_recevied),
+                             sizeof(frame_buffer_serial_rx));
+            if (bytes_received >= bytes_requested) { // Actually > should never apply
                 // One frame completed, reset the counter
                 cdc_bytes_recevied = 0;
                 // Copy rx buffer over to the frame buffer, the location in the
@@ -441,13 +454,13 @@ int main() {
     // Initialize tlc59283 interface
     init_tlc59283_interface();
 
-    // Initialize UART/TinyUSB for receiving frames
-    #ifdef FRAME_RECEIVE_UART
+// Initialize UART/TinyUSB for receiving frames
+#ifdef FRAME_RECEIVE_UART
     init_uart_frame_receive();
-    #endif
-    #ifdef FRAME_RECEIVE_TINYUSB
+#endif
+#ifdef FRAME_RECEIVE_TINYUSB
     init_tinyusb_frame_receive();
-    #endif
+#endif
 
     // Setup timer for frame modification callback (do something like rotate the frame buffer)
     struct repeating_timer timer;

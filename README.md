@@ -5,9 +5,9 @@ available [here](https://github.com/burbschat/ledmat8x16).
 
 This is a work in progress. The code is not yet very clean, but I try my best
 to keep it somewhat ordered.
-Btw. the code is a `.c` file but I think some syntax I use is techically C++ syntax.
+Btw. the code is a `.c` file but I think some syntax I use is techically C++ syntax. Forgive me.
 
-## Features (and Todos)
+## Features
 So far implemented are the following:
 * Clocking out serial data using PIO at reasonably high frequencies
     * Runs non-blocking for the duration of a row transmission (data read from frame buffer via DMA)
@@ -20,20 +20,26 @@ So far implemented are the following:
     * Header data selects frame in frame buffer on the pico
     * Received data written to receive frame buffer non-blocking via DMA
     * Once the buffer is filled, it is latched into the selected location of the frame buffer
-    * Plan to implement a state machine for UART communication
-        * Have a transmit initialized by some special character
-        * Maybe set a timeout for the transmission to make sure we don't get stuck waiting
-        * Further states/functionality can be implemented (setting row pulse intervals etc.)
-        * A single sided state machine on only the pi where the state can be
-        dictated by the PC sending data should be sufficient
+* Transmission of frames to the Pico via USB serial (TinyUSB CDC device)
+    * Uses the same protocol as the UART
+    * Much faster than the UART!
+    * Cannot be run entirely interrupt drive, *but* we have another core in the
+    pico (or the MCU on the pico to be precise). The TinyUSB loop is thus run
+    on the second core and does not interfere with the main loop.
 * PWM-like adjustment of perceived brightness
-    * Also add option for some randomness in the on/off times to avoid annoying
+    * Also added option for some randomness in the on/off times to avoid annoying
     noises from the LEDs (probably due to thermal expansion)
-* A simple example Python script to send a frame via UART
+* A simple example Python script to send a frame via serial for a single row display
+* A not so simple Python script to send a frame for a multi-row snaked display
+    * Takes care of arranging data in the correct order. This is done on the
+    host PC as this is much easier and allows the pico to just read buffers in
+    the order they are clocked out to the shift registers, which is the simpler
+    solution.
 
-### Notes
-* Non-blocking Serial via USB
-    * [This thread](https://forums.raspberrypi.com/viewtopic.php?t=354616) contains some useful information
-    * Consider TinyUSB for USB CDC
-    * `getchar_timeout_us` solution might also be alright, but if possible I'd like to use a interrupt/callback instead of polling
-    * For now I'll just use the USB bridge via a second Pico which I use for debugging anyways
+## Todos (that I've come to think of so far)
+* Implement a state machine for serial communication?
+    * Have a transmit initialized by some special character
+    * Maybe set a timeout for the transmission to make sure we don't get stuck waiting
+    * Further states/functionality can be implemented (setting row pulse intervals etc.)
+    * A single sided state machine on only the pi where the state can be
+    dictated by the PC sending data should be sufficient
